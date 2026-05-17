@@ -819,6 +819,7 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--ink);min-h
 // These will be properly defined later in the main script
 window.setArea = function(a,b){ window._pendingArea={a,b}; };
 window.navTo   = function(p)  { window._pendingNav=p; };
+window.setMbn  = function(k)  { window._pendingMbn=k; };
 </script>
 <script>
 // ══════════════════════════════════════════════════
@@ -2231,22 +2232,7 @@ function confirmarLimparTeste(){
     return;
   }
 
-  if(!confirm(
-    `⚠️ APAGAR DADOS DE TESTE
-
-` +
-    `Isso vai remover:
-` +
-    `• ${totalPessTest} pessoa(s) de teste
-` +
-    `• ${totalTest} célula(s) de teste
-
-` +
-    `Os dados reais importados da planilha serão mantidos.
-
-` +
-    `Deseja continuar?`
-  )) return;
+  if(!confirm('\u26a0\ufe0f APAGAR DADOS DE TESTE\n\nIsso vai remover:\n\u2022 ' + totalPessTest + ' pessoa(s) de teste\n\u2022 ' + totalTest + ' c\u00e9lula(s) de teste\n\nOs dados reais ser\u00e3o mantidos.\n\nDeseja continuar?')) return;
 
   // Second confirmation
   if(!confirm('⚠️ Última confirmação: Apagar dados de teste permanentemente?')) return;
@@ -2263,9 +2249,7 @@ function confirmarLimparTeste(){
   sv();
   updateCounts();
   renderDash();
-  alert('✅ Dados de teste removidos com sucesso!
-
-O app agora contém apenas os dados reais importados da planilha.');
+  alert('✅ Dados de teste removidos com sucesso! O app agora contém apenas os dados reais importados da planilha.');
 }
 
 // ══════════════════════════════════════════════════
@@ -2389,6 +2373,7 @@ function setMbn(key){
   const el=document.getElementById('mbn-'+key);
   if(el)el.classList.add('on');
 }
+window.setMbn = setMbn;
 
 function syncAreaBtns(area){
   document.querySelectorAll('.tb-areas .ac').forEach(b=>b.classList.toggle('on', b.textContent.trim()===area));
