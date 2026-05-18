@@ -763,7 +763,7 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--ink);min-h
     <div class="fr">
       <div class="fg"><label class="fl">Local / Bairro</label><input class="fi" id="c-loc" placeholder="Endereço"></div>
       <div class="fg"><label class="fl">Área</label>
-        <select class="fs" id="c-area"><option value="Videira">Videira</option><option value="Atos">Atos</option><option value="Dynamus">Dynamus</option></select></div>
+        <select class="fs" id="c-area" onchange="_atualizarSelectsCelula(this.value)"><option value="Videira">Videira</option><option value="Atos">Atos</option><option value="Dynamus">Dynamus</option></select></div>
     </div>
     <div class="fr">
       <div class="fg"><label class="fl">Líder em Treinamento</label><input class="fi" id="c-trn" placeholder="Nome (opcional)"></div>
@@ -1031,13 +1031,17 @@ function savP(){
 function openMoCelula(cel=null){
   eid=cel?.id||null;
   document.getElementById('mc-t').textContent=cel?'Editar Célula':'Nova Célula';
-  const lids=DB.pessoas.filter(p=>p.role==='lider');
-  const sups=DB.pessoas.filter(p=>p.role==='supervisor');
-  document.getElementById('c-lid').innerHTML='<option value="">— Sem líder —</option>'+lids.map(l=>`<option value="${l.id}">${l.nome}</option>`).join('');
-  document.getElementById('c-sup').innerHTML='<option value="">— Sem supervisor —</option>'+sups.map(s=>`<option value="${s.id}">${s.nome}</option>`).join('');
+
+  // Determine which area to filter by
+  const areaFiltro = cel ? cel.area : curArea;
+  document.getElementById('c-area').value = areaFiltro;
+
+  // Filter líderes and supervisores BY AREA
+  _atualizarSelectsCelula(areaFiltro);
+
   if(cel){
-    document.getElementById('c-nm').value=cel.nome; document.getElementById('c-dia').value=cel.dia;
-    // If liderId is set use it; otherwise try to match by treinNome
+    document.getElementById('c-nm').value=cel.nome;
+    document.getElementById('c-dia').value=cel.dia;
     const resolvedLider = cel.liderId || (() => {
       if (!cel.treinNome) return '';
       const match = DB.pessoas.find(p => p.role==='lider' &&
@@ -1045,14 +1049,29 @@ function openMoCelula(cel=null){
       return match ? match.id : '';
     })();
     document.getElementById('c-lid').value = resolvedLider;
-    document.getElementById('c-sup').value=cel.supId||'';
-    document.getElementById('c-loc').value=cel.local||''; document.getElementById('c-area').value=cel.area;
-    document.getElementById('c-trn').value=cel.treinNome||''; document.getElementById('c-tok').value=cel.treinOk||'nao';
+    document.getElementById('c-sup').value = cel.supId||'';
+    document.getElementById('c-loc').value = cel.local||'';
+    document.getElementById('c-trn').value = cel.treinNome||'';
+    document.getElementById('c-tok').value = cel.treinOk||'nao';
   } else {
     ['c-nm','c-loc','c-trn'].forEach(id=>document.getElementById(id).value='');
-    document.getElementById('c-area').value=curArea; document.getElementById('c-tok').value='nao';
+    document.getElementById('c-tok').value = 'nao';
+    document.getElementById('c-lid').value = '';
+    document.getElementById('c-sup').value = '';
   }
   openMo('mo-c');
+}
+
+// Atualiza selects de líder e supervisor filtrando pela área
+function _atualizarSelectsCelula(area){
+  const lids = DB.pessoas.filter(p=>p.role==='lider' && p.area===area);
+  const sups = DB.pessoas.filter(p=>p.role==='supervisor' && p.area===area);
+  document.getElementById('c-lid').innerHTML =
+    '<option value="">— Sem líder —</option>' +
+    lids.map(l=>`<option value="${l.id}">${l.nome}</option>`).join('');
+  document.getElementById('c-sup').innerHTML =
+    '<option value="">— Sem supervisor —</option>' +
+    sups.map(s=>`<option value="${s.id}">${s.nome}</option>`).join('');
 }
 
 function savC(){
