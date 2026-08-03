@@ -1336,7 +1336,59 @@ let curArea = localStorage.getItem('CVarea')||'Videira';
 let modoPastorArea = false; // true quando logado como Pastor de Área: trava a área e bloqueia edição
 let eid=null, mCid=null;
 
-// ── SAVE: local first, then Firebase if connected ──
+// ── MESCLAGEM DE DADOS (evita que dois usuários simultâneos se apaguem) ────
+// Une dois arrays de registros com .id: mantém tudo que existe só de um lado
+// (sem perder nada) e, quando o MESMO id existe nos dois com conteúdo
+// diferente, usa a versão do lado marcado como "mais novo".
+function _mesclarArraysPorId(localArr, remoteArr, maisNovo){
+  const mapa = new Map();
+  (remoteArr||[]).forEach(r=>{ if(r && r.id!=null) mapa.set(r.id, r); });
+  (localArr||[]).forEach(l=>{
+    if(!l || l.id==null) return;
+    if(!mapa.has(l.id)){ mapa.set(l.id, l); return; }
+    const r = mapa.get(l.id);
+    if(JSON.stringify(r) !== JSON.stringify(l)){
+      mapa.set(l.id, maisNovo==='local' ? l : r);
+    }
+  });
+  return Array.from(mapa.values());
+}
+
+// Mescla células mantendo os dados internos (membros e relatórios) também por ID,
+// não só o registro da célula como um bloco único.
+function _mesclarCelulas(localCels, remoteCels, maisNovo){
+  const mapa = new Map();
+  (remoteCels||[]).forEach(c=>{ if(c && c.id!=null) mapa.set(c.id, c); });
+  (localCels||[]).forEach(lc=>{
+    if(!lc || lc.id==null) return;
+    if(!mapa.has(lc.id)){ mapa.set(lc.id, lc); return; }
+    const rc = mapa.get(lc.id);
+    const base = maisNovo==='local' ? lc : rc;
+    mapa.set(lc.id, {
+      ...base,
+      membros: _mesclarArraysPorId(lc.membros, rc.membros, maisNovo),
+      relatorios: _mesclarArraysPorId(lc.relatorios, rc.relatorios, maisNovo),
+    });
+  });
+  return Array.from(mapa.values());
+}
+
+// Junta o DB local com o da nuvem, sem descartar nada que só exista de um lado.
+function mergeDB(local, remote){
+  if(!remote) return local;
+  if(!local)  return remote;
+  const maisNovo = (local._updatedAt||0) >= (remote._updatedAt||0) ? 'local' : 'remote';
+  return {
+    ...(maisNovo==='local' ? local : remote),
+    pessoas:       _mesclarArraysPorId(local.pessoas, remote.pessoas, maisNovo),
+    membrosGlobal: _mesclarArraysPorId(local.membrosGlobal, remote.membrosGlobal, maisNovo),
+    mensagens:     _mesclarArraysPorId(local.mensagens, remote.mensagens, maisNovo),
+    celulas:       _mesclarCelulas(local.celulas, remote.celulas, maisNovo),
+    _id: Math.max(local._id||1, remote._id||1), // sempre o maior — nunca gera ID colidindo
+  };
+}
+
+// ── SAVE: local first, then Firebase if connected (com mesclagem) ──
 const sv = ()=>{
   DB._updatedAt = Date.now(); // timestamp real para resolver conflitos de sync
   localStorage.setItem('CVdb', JSON.stringify(DB));
@@ -1348,18 +1400,29 @@ const sv = ()=>{
   if(fbReady && !pareceDadosDeExemplo){
     fbSyncing = true;
     updateSyncBadge('sync');
-    FirebaseREST.set('celulas_vivas','db',{
-      data: JSON.stringify(DB),
-      updatedAt: new Date().toISOString(),
-      updatedBy: 'user'
-    }).then(()=>{
-      fbSyncing = false;
-      updateSyncBadge('ok');
-    }).catch(err=>{
-      fbSyncing = false;
-      updateSyncBadge('err');
-      console.error('Firebase save error:', err);
-    });
+    (async ()=>{
+      try {
+        // Busca o que está na nuvem agora e mescla, em vez de sobrescrever tudo —
+        // assim, se outra pessoa salvou algo diferente nos últimos segundos, nada se perde.
+        const doc = await FirebaseREST.get('celulas_vivas','db');
+        let remote = null;
+        if(doc && doc.data){ try { remote = JSON.parse(doc.data); } catch(e){ remote = null; } }
+        DB = mergeDB(DB, remote);
+        DB._updatedAt = Date.now();
+        localStorage.setItem('CVdb', JSON.stringify(DB));
+        await FirebaseREST.set('celulas_vivas','db',{
+          data: JSON.stringify(DB),
+          updatedAt: new Date().toISOString(),
+          updatedBy: 'user'
+        });
+        fbSyncing = false;
+        updateSyncBadge('ok');
+      } catch(err){
+        fbSyncing = false;
+        updateSyncBadge('err');
+        console.error('Firebase save error:', err);
+      }
+    })();
   }
 };
 const save = sv;
@@ -3218,38 +3281,35 @@ async function autoConnectFirebase(){
     setBadgeON();
 
     if(doc && doc.data){
-      // Cloud has data — compare with local
+      // Cloud has data — merge with local (não escolhe um lado, junta os dois)
       let remote;
       try { remote = JSON.parse(doc.data); } catch(e){ remote = null; }
 
-      const remoteTs = (remote && remote._updatedAt) ? remote._updatedAt : 0;
-      const localTs  = DB._updatedAt || 0;
-
-      // Proteção contra sessão antiga/dados de exemplo sobrescrevendo dados reais:
-      // se o local tem muito menos gente cadastrada que a nuvem, algo está errado
-      // (provável aba/aparelho esquecido com dados de exemplo) — não sobrescreve.
+      // Proteção contra sessão antiga/dados de exemplo: se o local tem muito menos
+      // gente que a nuvem, não deixa ele "ganhar" a mesclagem por ter timestamp novo.
       const pessoasLocal  = (DB.pessoas||[]).length;
       const pessoasRemoto = remote ? (remote.pessoas||[]).length : 0;
       const localSuspeito = pessoasRemoto > 15 && pessoasLocal < pessoasRemoto / 2;
 
-      function _usarDadosNuvem(motivo){
-        console.log('🔥 Usando dados da nuvem —', motivo, '(ts:', remoteTs, ')');
-        DB = remote;
+      if(remote){
+        const dbAntesDeMesclar = localSuspeito ? {...DB, _updatedAt: 0} : DB; // se local suspeito, força a nuvem "ganhar" empates
+        DB = mergeDB(dbAntesDeMesclar, remote);
         if(!DB.mensagens) DB.mensagens = [];
         if(!DB.membrosGlobal) DB.membrosGlobal = [];
         localStorage.setItem('CVdb', JSON.stringify(DB));
         updateCounts();
         renderDash();
         ocultarSyncOverlay();
-      }
-
-      if(remote && remoteTs > localTs){
-        _usarDadosNuvem('mais recente que o local');
-      } else if(remote && localSuspeito){
-        _usarDadosNuvem(`local com muito menos gente cadastrada (${pessoasLocal} vs ${pessoasRemoto} na nuvem) — provável sessão antiga`);
+        // Envia de volta o resultado já mesclado, pra nuvem ficar com a união também
+        console.log('🔥 Enviando dados mesclados para a nuvem...');
+        FirebaseREST.set('celulas_vivas','db',{
+          data: JSON.stringify(DB),
+          updatedAt: new Date().toISOString(),
+          updatedBy: 'auto-merge'
+        }).catch(e => console.warn('Push failed:', e));
       } else {
-        // Local é igual ou mais recente, e não parece suspeito — envia para nuvem
-        console.log('🔥 Enviando dados locais para nuvem (ts:', localTs, ')');
+        // Nuvem tinha algo mas não deu pra ler — envia o que temos, sem mesclar
+        console.log('🔥 Não foi possível ler a nuvem, enviando dados locais...');
         FirebaseREST.set('celulas_vivas','db',{
           data: JSON.stringify(DB),
           updatedAt: new Date().toISOString(),
@@ -3348,9 +3408,10 @@ function iniciarListener(){
       const remote = JSON.parse(doc.data);
       const rTs = remote._updatedAt || 0;
       const lTs = DB._updatedAt || 0;
+      if(rTs === lTs) return; // nada novo na nuvem, nada a fazer
       const remotoSuspeito = (DB.pessoas||[]).length > 15 && (remote.pessoas||[]).length < (DB.pessoas||[]).length / 2;
-      if(rTs > lTs && !remotoSuspeito){
-        DB = remote;
+      if(!remotoSuspeito){
+        DB = mergeDB(DB, remote);
         if(!DB.mensagens) DB.mensagens = [];
         if(!DB.membrosGlobal) DB.membrosGlobal = [];
         localStorage.setItem('CVdb', JSON.stringify(DB));
