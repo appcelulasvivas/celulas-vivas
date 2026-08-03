@@ -1340,15 +1340,22 @@ let eid=null, mCid=null;
 // Une dois arrays de registros com .id: mantém tudo que existe só de um lado
 // (sem perder nada) e, quando o MESMO id existe nos dois com conteúdo
 // diferente, usa a versão do lado marcado como "mais novo".
+// Alguns registros (ex: relatórios) usam "_id" em vez de "id" como identificador.
+// Esta função reconhece os dois, para nunca tratar um registro válido como "sem id".
+function _chaveReg(r){
+  if(!r) return null;
+  return r.id!=null ? r.id : (r._id!=null ? r._id : null);
+}
 function _mesclarArraysPorId(localArr, remoteArr, maisNovo){
   const mapa = new Map();
-  (remoteArr||[]).forEach(r=>{ if(r && r.id!=null) mapa.set(r.id, r); });
+  (remoteArr||[]).forEach(r=>{ const k=_chaveReg(r); if(k!=null) mapa.set(k, r); });
   (localArr||[]).forEach(l=>{
-    if(!l || l.id==null) return;
-    if(!mapa.has(l.id)){ mapa.set(l.id, l); return; }
-    const r = mapa.get(l.id);
+    const k=_chaveReg(l);
+    if(k==null) return;
+    if(!mapa.has(k)){ mapa.set(k, l); return; }
+    const r = mapa.get(k);
     if(JSON.stringify(r) !== JSON.stringify(l)){
-      mapa.set(l.id, maisNovo==='local' ? l : r);
+      mapa.set(k, maisNovo==='local' ? l : r);
     }
   });
   return Array.from(mapa.values());
