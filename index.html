@@ -6,7 +6,11 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Células Vivas">
 <meta name="theme-color" content="#1C1410">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%20180%20180%27%3E%3Crect%20width%3D%27180%27%20height%3D%27180%27%20rx%3D%2736%27%20fill%3D%27%231C1410%27/%3E%3Ctext%20x%3D%2790%27%20y%3D%27118%27%20font-family%3D%27Georgia%2Cserif%27%20font-size%3D%2784%27%20font-weight%3D%27700%27%20fill%3D%27%23E8C97A%27%20text-anchor%3D%27middle%27%3ECV%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%20180%20180%27%3E%3Crect%20width%3D%27180%27%20height%3D%27180%27%20rx%3D%2736%27%20fill%3D%27%231C1410%27/%3E%3Ctext%20x%3D%2790%27%20y%3D%27118%27%20font-family%3D%27Georgia%2Cserif%27%20font-size%3D%2784%27%20font-weight%3D%27700%27%20fill%3D%27%23E8C97A%27%20text-anchor%3D%27middle%27%3ECV%3C/text%3E%3C/svg%3E">
+<link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%20%22C%C3%A9lulas%20Vivas%22%2C%20%22short_name%22%3A%20%22C%C3%A9lulas%20Vivas%22%2C%20%22start_url%22%3A%20%22./%22%2C%20%22display%22%3A%20%22standalone%22%2C%20%22background_color%22%3A%20%22%231C1410%22%2C%20%22theme_color%22%3A%20%22%231C1410%22%2C%20%22icons%22%3A%20%5B%7B%22src%22%3A%20%22data%3Aimage/svg%2Bxml%2C%253Csvg%2520xmlns%253D%2527http%253A//www.w3.org/2000/svg%2527%2520viewBox%253D%25270%25200%2520180%2520180%2527%253E%253Crect%2520width%253D%2527180%2527%2520height%253D%2527180%2527%2520rx%253D%252736%2527%2520fill%253D%2527%25231C1410%2527/%253E%253Ctext%2520x%253D%252790%2527%2520y%253D%2527118%2527%2520font-family%253D%2527Georgia%252Cserif%2527%2520font-size%253D%252784%2527%2520font-weight%253D%2527700%2527%2520fill%253D%2527%2523E8C97A%2527%2520text-anchor%253D%2527middle%2527%253ECV%253C/text%253E%253C/svg%253E%22%2C%20%22sizes%22%3A%20%22180x180%22%2C%20%22type%22%3A%20%22image/svg%2Bxml%22%2C%20%22purpose%22%3A%20%22any%20maskable%22%7D%5D%7D">
 <title>Células Vivas — Gestão de Grupos</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <!-- SheetJS for reading Excel files in browser -->
@@ -622,6 +626,11 @@ body.modo-pastor .pastor-ro-notice{display:block !important}
 </style>
 </head>
 <body>
+<div id="fb-sync-overlay" style="position:fixed;inset:0;background:#1C1410;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;font-family:'Outfit',sans-serif">
+  <div style="width:40px;height:40px;border:3px solid rgba(232,201,122,.25);border-top-color:#E8C97A;border-radius:50%;animation:fbspin .8s linear infinite"></div>
+  <div style="color:#E8C97A;font-size:13px;font-weight:600;letter-spacing:.5px">Sincronizando dados...</div>
+  <style>@keyframes fbspin{to{transform:rotate(360deg)}}</style>
+</div>
 <div id="topbar">
   <div class="tbb mob" style="display:none;margin-right:4px" onclick="document.getElementById('sb').classList.toggle('on');document.getElementById('sb-overlay').classList.toggle('on')" title="Menu">☰</div>
   <div class="tb-logo">Células <span>Vivas</span></div>
@@ -643,6 +652,10 @@ body.modo-pastor .pastor-ro-notice{display:block !important}
 <div id="login-screen">
   <div class="login-logo">Células <span>Vivas</span></div>
   <div class="login-sub">Gestão de Grupos</div>
+
+  <button id="btn-instalar-app" onclick="instalarApp()" style="display:none;align-items:center;justify-content:center;gap:8px;width:100%;max-width:320px;margin:14px 0 4px;padding:11px 16px;background:linear-gradient(135deg,#F9A825,#E8C97A);color:#1C1410;border:none;border-radius:12px;font-family:'Outfit',sans-serif;font-size:13px;font-weight:700;cursor:pointer">
+    📲 Instalar App na Tela Inicial
+  </button>
 
   <!-- PASSO 0: ESCOLHER PERFIL -->
   <div id="login-step0" style="width:100%;max-width:320px">
@@ -1328,7 +1341,11 @@ const sv = ()=>{
   DB._updatedAt = Date.now(); // timestamp real para resolver conflitos de sync
   localStorage.setItem('CVdb', JSON.stringify(DB));
   localStorage.setItem('CVarea', curArea);
-  if(fbReady){
+  // Proteção: nunca envia à nuvem um banco suspeitosamente pequeno (< 15 pessoas)
+  // — evita que uma aba/aparelho esquecido, ainda com dados de exemplo, apague
+  // os dados reais de todo mundo sem querer.
+  const pareceDadosDeExemplo = (DB.pessoas||[]).length < 15 && (DB.celulas||[]).length < 10;
+  if(fbReady && !pareceDadosDeExemplo){
     fbSyncing = true;
     updateSyncBadge('sync');
     FirebaseREST.set('celulas_vivas','db',{
@@ -3185,7 +3202,7 @@ function setBadgeOFF(){
 // ── AUTO CONNECT FIREBASE (REST API — works from file://) ──
 async function autoConnectFirebase(){
   const cfg = FB_CONFIG;
-  if(!cfg.apiKey || cfg.apiKey === 'COLE_AQUI'){ setBadgeOFF(); return; }
+  if(!cfg.apiKey || cfg.apiKey === 'COLE_AQUI'){ setBadgeOFF(); ocultarSyncOverlay(); return; }
 
   try {
     FirebaseREST.init(cfg);
@@ -3208,17 +3225,30 @@ async function autoConnectFirebase(){
       const remoteTs = (remote && remote._updatedAt) ? remote._updatedAt : 0;
       const localTs  = DB._updatedAt || 0;
 
-      if(remote && remoteTs > localTs){
-        // Nuvem é mais recente — usa dados da nuvem
-        console.log('🔥 Usando dados da nuvem (ts:', remoteTs, ')');
+      // Proteção contra sessão antiga/dados de exemplo sobrescrevendo dados reais:
+      // se o local tem muito menos gente cadastrada que a nuvem, algo está errado
+      // (provável aba/aparelho esquecido com dados de exemplo) — não sobrescreve.
+      const pessoasLocal  = (DB.pessoas||[]).length;
+      const pessoasRemoto = remote ? (remote.pessoas||[]).length : 0;
+      const localSuspeito = pessoasRemoto > 15 && pessoasLocal < pessoasRemoto / 2;
+
+      function _usarDadosNuvem(motivo){
+        console.log('🔥 Usando dados da nuvem —', motivo, '(ts:', remoteTs, ')');
         DB = remote;
         if(!DB.mensagens) DB.mensagens = [];
         if(!DB.membrosGlobal) DB.membrosGlobal = [];
         localStorage.setItem('CVdb', JSON.stringify(DB));
         updateCounts();
         renderDash();
+        ocultarSyncOverlay();
+      }
+
+      if(remote && remoteTs > localTs){
+        _usarDadosNuvem('mais recente que o local');
+      } else if(remote && localSuspeito){
+        _usarDadosNuvem(`local com muito menos gente cadastrada (${pessoasLocal} vs ${pessoasRemoto} na nuvem) — provável sessão antiga`);
       } else {
-        // Local é igual ou mais recente — envia para nuvem
+        // Local é igual ou mais recente, e não parece suspeito — envia para nuvem
         console.log('🔥 Enviando dados locais para nuvem (ts:', localTs, ')');
         FirebaseREST.set('celulas_vivas','db',{
           data: JSON.stringify(DB),
@@ -3251,7 +3281,59 @@ async function autoConnectFirebase(){
       // Still render local data
       updateCounts(); renderDash();
     }
+  } finally {
+    ocultarSyncOverlay();
   }
+}
+
+// Esconde a tela de "Sincronizando..." — chamada em todo caminho de saída de
+// autoConnectFirebase, e também por um limite de segurança (caso a rede trave).
+function ocultarSyncOverlay(){
+  const el = document.getElementById('fb-sync-overlay');
+  if(el) el.remove();
+}
+setTimeout(ocultarSyncOverlay, 6000); // nunca trava a tela por mais de 6s
+
+// ── INSTALAR APP NA TELA INICIAL ────────────────────────────────────────────
+let _deferredInstallPrompt = null;
+
+function _jaInstalado(){
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+window.addEventListener('beforeinstallprompt', (e)=>{
+  e.preventDefault();
+  _deferredInstallPrompt = e;
+  const btn = document.getElementById('btn-instalar-app');
+  if(btn && !_jaInstalado()) btn.style.display = 'flex';
+});
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  const btn = document.getElementById('btn-instalar-app');
+  if(!btn || _jaInstalado()) return;
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if(isIOS){
+    // iOS não tem instalação automática — mostra o botão com instruções manuais
+    btn.style.display = 'flex';
+  }
+});
+
+async function instalarApp(){
+  if(_deferredInstallPrompt){
+    _deferredInstallPrompt.prompt();
+    const { outcome } = await _deferredInstallPrompt.userChoice;
+    if(outcome === 'accepted'){
+      const btn = document.getElementById('btn-instalar-app');
+      if(btn) btn.style.display = 'none';
+    }
+    _deferredInstallPrompt = null;
+    return;
+  }
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  alert(isIOS
+    ? '📲 Pra instalar no iPhone:\n\n1. Toque no ícone de compartilhar (□ com seta ↑) na parte de baixo do Safari.\n2. Escolha "Adicionar à Tela de Início".\n3. Toque em "Adicionar".'
+    : '📲 Pra instalar:\n\n1. Toque nos três pontinhos (⋮) no canto do navegador.\n2. Escolha "Adicionar à tela inicial" ou "Instalar app".'
+  );
 }
 
 // ── POLLING LISTENER (replaces onSnapshot — REST doesn't support websockets) ──
@@ -3266,7 +3348,8 @@ function iniciarListener(){
       const remote = JSON.parse(doc.data);
       const rTs = remote._updatedAt || 0;
       const lTs = DB._updatedAt || 0;
-      if(rTs > lTs){
+      const remotoSuspeito = (DB.pessoas||[]).length > 15 && (remote.pessoas||[]).length < (DB.pessoas||[]).length / 2;
+      if(rTs > lTs && !remotoSuspeito){
         DB = remote;
         if(!DB.mensagens) DB.mensagens = [];
         if(!DB.membrosGlobal) DB.membrosGlobal = [];
@@ -3281,7 +3364,7 @@ function iniciarListener(){
 
 // Run after DOM loaded
 document.addEventListener('DOMContentLoaded', ()=>{
-  setTimeout(autoConnectFirebase, 1500);
+  setTimeout(autoConnectFirebase, 200);
 });
 
 // ══════════════════════════════════════════════════
