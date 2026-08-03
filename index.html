@@ -6838,6 +6838,8 @@ function pinConfirm(){
       return;
     }
     _sessaoAtual = { role:'admin', nome:'Administrador' };
+    modoPastorArea = false;
+    document.body.classList.remove('modo-pastor');
     esconderLogin();
     mostrarAppAdmin();
     return;
@@ -7881,6 +7883,8 @@ function fazerLogout(){
   // Resetar variáveis de sessão dos perfis
   _supFilIni = ''; _supFilFim = '';
   _coordFilIni = ''; _coordFilFim = '';
+  modoPastorArea = false;
+  document.body.classList.remove('modo-pastor');
 
   mostrarLogin();
 }
