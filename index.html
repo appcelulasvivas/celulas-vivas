@@ -1380,22 +1380,53 @@ function _mesclarCelulas(localCels, remoteCels, maisNovo){
   return Array.from(mapa.values());
 }
 
+// Dados de demonstração embutidos no app (DADOS_INICIAIS) usam sempre id < 200 —
+// mesmo corte que a ferramenta "Apagar Dados de Teste" já usa. Se alguém abrir o
+// app num aparelho/aba com armazenamento vazio, esses dados de exemplo carregam
+// primeiro; sem este filtro, a mesclagem os uniria PERMANENTEMENTE à nuvem real
+// (a mesclagem nunca apaga o que só existe de um lado). Por isso, antes de
+// mesclar, nunca deixamos um id<200 "novo" (que não existia do outro lado) entrar.
+function _semDadosDemo(arr, outroLado){
+  const idsOutroLado = new Set((outroLado||[]).map(x=>x && x.id).filter(id=>id!=null));
+  return (arr||[]).filter(x => !x || x.id==null || x.id>=200 || idsOutroLado.has(x.id));
+}
+
 // Junta o DB local com o da nuvem, sem descartar nada que só exista de um lado.
 function mergeDB(local, remote){
   if(!remote) return local;
   if(!local)  return remote;
   const maisNovo = (local._updatedAt||0) >= (remote._updatedAt||0) ? 'local' : 'remote';
+  const localLimpo  = {
+    ...local,
+    pessoas:       _semDadosDemo(local.pessoas, remote.pessoas),
+    membrosGlobal: _semDadosDemo(local.membrosGlobal, remote.membrosGlobal),
+    celulas:       _semDadosDemo(local.celulas, remote.celulas),
+  };
+  const remoteLimpo = {
+    ...remote,
+    pessoas:       _semDadosDemo(remote.pessoas, local.pessoas),
+    membrosGlobal: _semDadosDemo(remote.membrosGlobal, local.membrosGlobal),
+    celulas:       _semDadosDemo(remote.celulas, local.celulas),
+  };
   return {
-    ...(maisNovo==='local' ? local : remote),
-    pessoas:       _mesclarArraysPorId(local.pessoas, remote.pessoas, maisNovo),
-    membrosGlobal: _mesclarArraysPorId(local.membrosGlobal, remote.membrosGlobal, maisNovo),
+    ...(maisNovo==='local' ? localLimpo : remoteLimpo),
+    pessoas:       _mesclarArraysPorId(localLimpo.pessoas, remoteLimpo.pessoas, maisNovo),
+    membrosGlobal: _mesclarArraysPorId(localLimpo.membrosGlobal, remoteLimpo.membrosGlobal, maisNovo),
     mensagens:     _mesclarArraysPorId(local.mensagens, remote.mensagens, maisNovo),
-    celulas:       _mesclarCelulas(local.celulas, remote.celulas, maisNovo),
+    celulas:       _mesclarCelulas(localLimpo.celulas, remoteLimpo.celulas, maisNovo),
     _id: Math.max(local._id||1, remote._id||1), // sempre o maior — nunca gera ID colidindo
   };
 }
 
 // ── SAVE: local first, then Firebase if connected (com mesclagem) ──
+// Se uma sincronização com a nuvem já está em andamento e outro salvamento
+// acontece nesse meio tempo, NÃO inicia uma segunda busca-mescla-envio em
+// paralelo (isso causava corrida: a segunda buscava a nuvem antes da primeira
+// terminar de enviar, mesclava com dados desatualizados, e sobrescrevia o que
+// a primeira acabou de mandar — perdendo o que foi salvo no meio do caminho).
+// Em vez disso, só marca que precisa rodar de novo assim que a atual terminar.
+let _svPendente = false;
+
 const sv = ()=>{
   DB._updatedAt = Date.now(); // timestamp real para resolver conflitos de sync
   localStorage.setItem('CVdb', JSON.stringify(DB));
@@ -1404,34 +1435,48 @@ const sv = ()=>{
   // — evita que uma aba/aparelho esquecido, ainda com dados de exemplo, apague
   // os dados reais de todo mundo sem querer.
   const pareceDadosDeExemplo = (DB.pessoas||[]).length < 15 && (DB.celulas||[]).length < 10;
-  if(fbReady && !pareceDadosDeExemplo){
-    fbSyncing = true;
-    updateSyncBadge('sync');
-    (async ()=>{
-      try {
-        // Busca o que está na nuvem agora e mescla, em vez de sobrescrever tudo —
-        // assim, se outra pessoa salvou algo diferente nos últimos segundos, nada se perde.
-        const doc = await FirebaseREST.get('celulas_vivas','db');
-        let remote = null;
-        if(doc && doc.data){ try { remote = JSON.parse(doc.data); } catch(e){ remote = null; } }
-        DB = mergeDB(DB, remote);
-        DB._updatedAt = Date.now();
-        localStorage.setItem('CVdb', JSON.stringify(DB));
-        await FirebaseREST.set('celulas_vivas','db',{
-          data: JSON.stringify(DB),
-          updatedAt: new Date().toISOString(),
-          updatedBy: 'user'
-        });
-        fbSyncing = false;
-        updateSyncBadge('ok');
-      } catch(err){
-        fbSyncing = false;
-        updateSyncBadge('err');
-        console.error('Firebase save error:', err);
-      }
-    })();
+  if(!fbReady || pareceDadosDeExemplo) return;
+
+  if(fbSyncing){
+    _svPendente = true; // já tem sync rodando — entra na fila, não sobrepõe
+    return;
   }
+  _executarSyncNuvem();
 };
+
+function _executarSyncNuvem(){
+  fbSyncing = true;
+  updateSyncBadge('sync');
+  (async ()=>{
+    try {
+      // Busca o que está na nuvem agora e mescla, em vez de sobrescrever tudo —
+      // assim, se outra pessoa salvou algo diferente nos últimos segundos, nada se perde.
+      const doc = await FirebaseREST.get('celulas_vivas','db');
+      let remote = null;
+      if(doc && doc.data){ try { remote = JSON.parse(doc.data); } catch(e){ remote = null; } }
+      DB = mergeDB(DB, remote);
+      DB._updatedAt = Date.now();
+      localStorage.setItem('CVdb', JSON.stringify(DB));
+      await FirebaseREST.set('celulas_vivas','db',{
+        data: JSON.stringify(DB),
+        updatedAt: new Date().toISOString(),
+        updatedBy: 'user'
+      });
+      updateSyncBadge('ok');
+    } catch(err){
+      updateSyncBadge('err');
+      console.error('Firebase save error:', err);
+    } finally {
+      fbSyncing = false;
+      if(_svPendente){
+        // Chegou um salvamento novo enquanto essa sincronização rodava —
+        // roda de novo agora, pra garantir que ele também chegue na nuvem.
+        _svPendente = false;
+        _executarSyncNuvem();
+      }
+    }
+  })();
+}
 const save = sv;
 const uid = ()=>DB._id++;
 const ini = n=>(n||'').split(' ').filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase();
@@ -3274,6 +3319,9 @@ async function autoConnectFirebase(){
   const cfg = FB_CONFIG;
   if(!cfg.apiKey || cfg.apiKey === 'COLE_AQUI'){ setBadgeOFF(); ocultarSyncOverlay(); return; }
 
+  // Mesma proteção do sv(): enquanto essa conexão inicial busca/mescla/envia,
+  // nenhum outro sv() pode rodar em paralelo por cima (evita corrida logo na abertura do app).
+  fbSyncing = true;
   try {
     FirebaseREST.init(cfg);
     localStorage.setItem('CVfbConfig', JSON.stringify(cfg));
@@ -3349,6 +3397,11 @@ async function autoConnectFirebase(){
       updateCounts(); renderDash();
     }
   } finally {
+    fbSyncing = false;
+    if(_svPendente){
+      _svPendente = false;
+      _executarSyncNuvem(); // algo foi salvo enquanto conectava — sincroniza agora
+    }
     ocultarSyncOverlay();
   }
 }
