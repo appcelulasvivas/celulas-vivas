@@ -1414,7 +1414,10 @@ function mergeDB(local, remote){
     membrosGlobal: _mesclarArraysPorId(localLimpo.membrosGlobal, remoteLimpo.membrosGlobal, maisNovo),
     mensagens:     _mesclarArraysPorId(local.mensagens, remote.mensagens, maisNovo),
     celulas:       _mesclarCelulas(localLimpo.celulas, remoteLimpo.celulas, maisNovo),
-    _exclusoesMembros: _mesclarArraysPorId(local._exclusoesMembros, remote._exclusoesMembros, maisNovo),
+    _exclusoesMembros:      _mesclarArraysPorId(local._exclusoesMembros, remote._exclusoesMembros, maisNovo),
+    _exclusoesPessoas:      _mesclarArraysPorId(local._exclusoesPessoas, remote._exclusoesPessoas, maisNovo),
+    _exclusoesCelulas:      _mesclarArraysPorId(local._exclusoesCelulas, remote._exclusoesCelulas, maisNovo),
+    _exclusoesMembrosCelula:_mesclarArraysPorId(local._exclusoesMembrosCelula, remote._exclusoesMembrosCelula, maisNovo),
     _id: Math.max(local._id||1, remote._id||1), // sempre o maior — nunca gera ID colidindo
   };
   return _aplicarExclusoesPendentes(unido);
@@ -1423,17 +1426,31 @@ function mergeDB(local, remote){
 // A mesclagem, por natureza, nunca apaga o que só existe de um lado — então uma
 // exclusão feita localmente sempre "perdia" pra versão antiga vinda da nuvem no
 // próximo sync. Por isso guardamos um registro (que só cresce, nunca é apagado,
-// e por isso se mescla sem problema) com o que já foi excluído, e depois de toda
-// mesclagem aplicamos essas exclusões de verdade — garantindo que elas "vençam"
-// mesmo se a nuvem ainda tiver a versão antiga por um tempo.
+// e por isso se mescla sem problema) com o que já foi excluído — um pra cada
+// tipo de dado — e depois de toda mesclagem aplicamos essas exclusões de
+// verdade, garantindo que elas "vençam" mesmo se a nuvem ainda tiver a versão
+// antiga por um tempo.
 function _aplicarExclusoesPendentes(db){
-  const excl = db._exclusoesMembros || [];
-  if(!excl.length) return db;
-  const idsExcluidos = new Set(excl.map(e=>e.id));
-  db.membrosGlobal = (db.membrosGlobal||[]).filter(m=>!idsExcluidos.has(m.id));
-  (db.celulas||[]).forEach(c=>{
-    if(c.membros) c.membros = c.membros.filter(m=>!(m.globalId!=null && idsExcluidos.has(m.globalId)));
-  });
+  const exclM = db._exclusoesMembros||[], exclP = db._exclusoesPessoas||[],
+        exclC = db._exclusoesCelulas||[], exclMC = db._exclusoesMembrosCelula||[];
+  if(exclM.length){
+    const ids = new Set(exclM.map(e=>e.id));
+    db.membrosGlobal = (db.membrosGlobal||[]).filter(m=>!ids.has(m.id));
+    (db.celulas||[]).forEach(c=>{ if(c.membros) c.membros = c.membros.filter(m=>!(m.globalId!=null && ids.has(m.globalId))); });
+  }
+  if(exclP.length){
+    const ids = new Set(exclP.map(e=>e.id));
+    db.pessoas = (db.pessoas||[]).filter(p=>!ids.has(p.id));
+    (db.pessoas||[]).forEach(p=>{ if(p.parentId!=null && ids.has(p.parentId)) p.parentId=null; });
+  }
+  if(exclC.length){
+    const ids = new Set(exclC.map(e=>e.id));
+    db.celulas = (db.celulas||[]).filter(c=>!ids.has(c.id));
+  }
+  if(exclMC.length){
+    const ids = new Set(exclMC.map(e=>e.id));
+    (db.celulas||[]).forEach(c=>{ if(c.membros) c.membros = c.membros.filter(m=>!ids.has(m.id)); });
+  }
   return db;
 }
 
@@ -1753,6 +1770,8 @@ function savC(){
 
 function delCel(id){
   if(!confirm('Excluir esta célula?')) return;
+  if(!DB._exclusoesCelulas) DB._exclusoesCelulas = [];
+  DB._exclusoesCelulas.push({ id, quando: Date.now() });
   DB.celulas=DB.celulas.filter(c=>c.id!==id); sv(); updateCounts(); navTo('celulas');
 }
 
@@ -1807,6 +1826,8 @@ function savM(){
 function delM(cid,mid){
   const cel=DB.celulas.find(c=>c.id===cid); if(!cel) return;
   const removed = (cel.membros||[]).find(m=>m.id===mid);
+  if(!DB._exclusoesMembrosCelula) DB._exclusoesMembrosCelula = [];
+  DB._exclusoesMembrosCelula.push({ id: mid, quando: Date.now() });
   // If removing the trainee leader, clear treinNome
   if(removed && removed.funcao==='lider_treinamento'){
     cel.treinNome=''; cel.treinOk='nao';
@@ -2524,6 +2545,8 @@ function editP(id){
 
 function delP(id){
   if(!confirm('Excluir este cadastro?')) return;
+  if(!DB._exclusoesPessoas) DB._exclusoesPessoas = [];
+  DB._exclusoesPessoas.push({ id, quando: Date.now() });
   DB.pessoas=DB.pessoas.filter(p=>p.id!==id);
   DB.pessoas.forEach(p=>{if(p.parentId===id) p.parentId=null;});
   sv(); closeMo('mo-p'); updateCounts(); renderPg(curPg());
@@ -6237,6 +6260,8 @@ function supExcluirCelula(celId){
   const cel = DB.celulas.find(c=>Number(c.id)===Number(celId));
   if(!cel) return;
   if(!confirm(`Excluir a célula "${cel.nome}"?\n\nEsta ação não pode ser desfeita.`)) return;
+  if(!DB._exclusoesCelulas) DB._exclusoesCelulas = [];
+  DB._exclusoesCelulas.push({ id: cel.id, quando: Date.now() });
   DB.celulas = DB.celulas.filter(c=>Number(c.id)!==Number(celId));
   sv();
   document.getElementById('pg-sup-det-cel').style.display = 'none';
@@ -7472,6 +7497,8 @@ function removerMembroLider(membroId){
   if(!confirm('Remover este membro da célula?')) return;
   const cel = DB.celulas.find(c=>c.id===_sessaoAtual?.celula?.id);
   if(!cel) return;
+  if(!DB._exclusoesMembrosCelula) DB._exclusoesMembrosCelula = [];
+  DB._exclusoesMembrosCelula.push({ id: membroId, quando: Date.now() });
   cel.membros = (cel.membros||[]).filter(m=>m.id!==membroId);
   _sessaoAtual.celula = cel;
   sv();
