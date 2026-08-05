@@ -1408,14 +1408,33 @@ function mergeDB(local, remote){
     membrosGlobal: _semDadosDemo(remote.membrosGlobal, local.membrosGlobal),
     celulas:       _semDadosDemo(remote.celulas, local.celulas),
   };
-  return {
+  const unido = {
     ...(maisNovo==='local' ? localLimpo : remoteLimpo),
     pessoas:       _mesclarArraysPorId(localLimpo.pessoas, remoteLimpo.pessoas, maisNovo),
     membrosGlobal: _mesclarArraysPorId(localLimpo.membrosGlobal, remoteLimpo.membrosGlobal, maisNovo),
     mensagens:     _mesclarArraysPorId(local.mensagens, remote.mensagens, maisNovo),
     celulas:       _mesclarCelulas(localLimpo.celulas, remoteLimpo.celulas, maisNovo),
+    _exclusoesMembros: _mesclarArraysPorId(local._exclusoesMembros, remote._exclusoesMembros, maisNovo),
     _id: Math.max(local._id||1, remote._id||1), // sempre o maior — nunca gera ID colidindo
   };
+  return _aplicarExclusoesPendentes(unido);
+}
+
+// A mesclagem, por natureza, nunca apaga o que só existe de um lado — então uma
+// exclusão feita localmente sempre "perdia" pra versão antiga vinda da nuvem no
+// próximo sync. Por isso guardamos um registro (que só cresce, nunca é apagado,
+// e por isso se mescla sem problema) com o que já foi excluído, e depois de toda
+// mesclagem aplicamos essas exclusões de verdade — garantindo que elas "vençam"
+// mesmo se a nuvem ainda tiver a versão antiga por um tempo.
+function _aplicarExclusoesPendentes(db){
+  const excl = db._exclusoesMembros || [];
+  if(!excl.length) return db;
+  const idsExcluidos = new Set(excl.map(e=>e.id));
+  db.membrosGlobal = (db.membrosGlobal||[]).filter(m=>!idsExcluidos.has(m.id));
+  (db.celulas||[]).forEach(c=>{
+    if(c.membros) c.membros = c.membros.filter(m=>!(m.globalId!=null && idsExcluidos.has(m.globalId)));
+  });
+  return db;
 }
 
 // ── SAVE: local first, then Firebase if connected (com mesclagem) ──
@@ -10145,6 +10164,11 @@ function delMembroGlobal() {
   if (!confirm('Excluir este membro do cadastro global?')) return;
   // Encontra o membro para saber nome/vínculo
   const membro = (DB.membrosGlobal||[]).find(m=>m.id===mgEid);
+  // Registra a exclusão no log persistente — isso é o que garante que ela
+  // sobreviva à próxima sincronização (sem isso, a mesclagem trazia o membro
+  // de volta, porque só sabe unir o que existe, não apagar).
+  if(!DB._exclusoesMembros) DB._exclusoesMembros = [];
+  DB._exclusoesMembros.push({ id: mgEid, nome: membro?.nome||'', quando: Date.now() });
   // Remove do cadastro global
   DB.membrosGlobal = (DB.membrosGlobal||[]).filter(m=>m.id!==mgEid);
   // Remove também a cópia embutida em QUALQUER célula — não confia só no campo
