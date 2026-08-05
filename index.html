@@ -9947,7 +9947,16 @@ function renderMgIdeGrid() {
     </div>`;
   }).join('');
 }
-function toggleMgIde(cid){ if(mgIde[cid]) delete mgIde[cid]; else mgIde[cid]={inicio:'',fim:''}; renderMgIdeGrid(); }
+function toggleMgIde(cid){
+  if(mgIde[cid]){
+    // Já tem dado salvo (pelo menos a data de conclusão) — confirma antes de apagar,
+    // pra evitar perder o registro por causa de um toque sem querer.
+    if(mgIde[cid].fim && !confirm('Este curso já está marcado como concluído, com data salva.\n\nDesmarcar vai apagar as datas de início e conclusão. Tem certeza?')) return;
+    delete mgIde[cid];
+  }
+  else mgIde[cid]={inicio:'',fim:''};
+  renderMgIdeGrid();
+}
 function setMgIde(cid,f,v){ if(!mgIde[cid]) mgIde[cid]={inicio:'',fim:''}; mgIde[cid][f]=v; }
 
 function savMembroGlobal(forcarSalvar=false) {
@@ -10640,7 +10649,10 @@ function renderIdeGrid() {
 }
 
 function toggleIde(cid) {
-  if(mEditIde[cid]) delete mEditIde[cid];
+  if(mEditIde[cid]){
+    if(mEditIde[cid].fim && !confirm('Este curso já está marcado como concluído, com data salva.\n\nDesmarcar vai apagar as datas de início e conclusão. Tem certeza?')) return;
+    delete mEditIde[cid];
+  }
   else mEditIde[cid]={inicio:'',fim:''};
   renderIdeGrid();
 }
