@@ -2012,7 +2012,8 @@ function bPC(p){
         ${supMultWarn?`<span class="tg tgr">⚠️ Sem sup. em treinamento</span>`:''}
         ${p.treinNome&&!supMultRdy?`<span class="tg tgp">🎓 ${p.treinNome.split(' ')[0]}</span>`:''}
         ${p.maeSupNome?`<span class="tg" style="background:#EAF3DE;color:#27500A">🌿 Nascida de ${p.maeSupNome.split(' ')[0]}</span>`:''}
-        ${p.dataMultiplicacao&&p.maeSupId===undefined?`<span class="tg" style="background:#EAF3DE;color:#27500A">🌿 Multiplicou em ${p.dataMultiplicacao}</span>`:''}
+        ${p.dataMultiplicacao&&p.maeSupId===undefined&&p.maeCoordId===undefined?`<span class="tg" style="background:#EAF3DE;color:#27500A">🌿 Multiplicou em ${p.dataMultiplicacao}</span>`:''}
+        ${p.maeCoordNome?`<span class="tg" style="background:#EAF3DE;color:#27500A">🌿 Nascida de ${p.maeCoordNome.split(' ')[0]}</span>`:''}
       </div>
     </div></div>`;
 }
@@ -2197,10 +2198,14 @@ function confirmarCoordSplit(){
   const idsMarcados = Array.from(document.querySelectorAll('.csp-sup-check:checked')).map(cb=>parseInt(cb.value));
   if(!idsMarcados.length){ alert('⚠️ Selecione ao menos um supervisor para a nova coordenação.'); return; }
 
+  const dataMultCoord = new Date().toLocaleDateString('pt-BR');
   const novoCoord = {
     id: uid(), role:'coordenador', nome: novoNome, tel:'',
     parentId: coord.parentId, area: coord.area,
-    obs: `Multiplicado da coordenação de ${coord.nome} em ${new Date().toLocaleDateString('pt-BR')} · Aprovado por ${pessoa.nome}`
+    maeCoordId: coord.id,
+    maeCoordNome: coord.nome,
+    dataMultiplicacao: dataMultCoord,
+    obs: `Multiplicado da coordenação de ${coord.nome} em ${dataMultCoord} · Aprovado por ${pessoa.nome}`
   };
   DB.pessoas.push(novoCoord);
 
@@ -2211,6 +2216,7 @@ function confirmarCoordSplit(){
 
   coord.treinNome = '';
   coord.treinOk   = 'nao';
+  coord.dataMultiplicacao = dataMultCoord; // marca no coordenador "mãe" também, igual já é feito com supervisor
 
   sv();
   document.getElementById('mo-coord-split').classList.remove('on');
@@ -2428,6 +2434,12 @@ function openPDet(id){
       <div><div style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700">${p.nome}</div>
       <div style="font-size:11px;color:var(--ink3)">${RL[p.role]} · ${p.area}${p.role==='lider'&&pn?' · Sup: '+pn:''}</div></div>
     </div>
+    ${(p.maeSupNome||p.maeCoordNome)?`<div style="background:#EAF3DE;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#27500A">
+      🌿 Nasceu da multiplicação de <b>${p.maeSupNome||p.maeCoordNome}</b>${p.dataMultiplicacao?' em <b>'+p.dataMultiplicacao+'</b>':''}
+    </div>`:''}
+    ${(p.dataMultiplicacao && p.maeSupId===undefined && p.maeCoordId===undefined)?`<div style="background:#E8F4FC;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#0A3050">
+      🎯 Multiplicou em <b>${p.dataMultiplicacao}</b>
+    </div>`:''}
     ${p.role!=='lider'&&pn?`<div style="margin-bottom:12px"><span style="font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--ink3)">Reporta para</span><br><span style="font-size:14px;font-weight:600">${pn}</span></div>`:''}
     ${p.role==='lider'&&myC.length?`<div style="margin-bottom:12px"><span style="font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--ink3)">Célula que lidera</span><br>${myC.map(c=>`<div style="font-size:14px;font-weight:600;color:var(--ink);cursor:pointer" onclick="closeMo('mo-p');renderCelDet(${c.id})">🌿 ${c.nome} <span style="font-size:11px;color:var(--ink3)">→</span></div>`).join('')}</div>`:''}
     ${p.tel?`<div style="margin-bottom:12px"><span style="font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--ink3)">Telefone</span><br><span style="font-size:14px">${p.tel}</span></div>`:''}
@@ -10131,17 +10143,20 @@ function savMembroGlobal(forcarSalvar=false) {
 // ── Delete ────────────────────────────────────────────────────────────────
 function delMembroGlobal() {
   if (!confirm('Excluir este membro do cadastro global?')) return;
-  // Encontra o membro para saber a célula vinculada
+  // Encontra o membro para saber nome/vínculo
   const membro = (DB.membrosGlobal||[]).find(m=>m.id===mgEid);
   // Remove do cadastro global
   DB.membrosGlobal = (DB.membrosGlobal||[]).filter(m=>m.id!==mgEid);
-  // Remove também da célula vinculada (se houver)
-  if(membro?.celulaId){
-    const cel = DB.celulas.find(c=>c.id===membro.celulaId);
-    if(cel?.membros){
-      cel.membros = cel.membros.filter(m=>m.nome.toLowerCase().trim()!==membro.nome.toLowerCase().trim());
-    }
-  }
+  // Remove também a cópia embutida em QUALQUER célula — não confia só no campo
+  // celulaId (que pode estar vazio/desatualizado nesse registro). Prioriza o
+  // vínculo por globalId; usa o nome como reforço só quando não há globalId.
+  (DB.celulas||[]).forEach(cel=>{
+    if(!cel.membros) return;
+    cel.membros = cel.membros.filter(m=>{
+      if(m.globalId!=null) return m.globalId!==mgEid;
+      return !(membro && m.nome.toLowerCase().trim()===membro.nome.toLowerCase().trim());
+    });
+  });
   // Se o líder estiver logado e a célula afetada for a dele, atualiza sessão
   if(_sessaoAtual?.role==='lider' && membro?.celulaId===_sessaoAtual?.celula?.id){
     const cel = DB.celulas.find(c=>c.id===membro.celulaId);
