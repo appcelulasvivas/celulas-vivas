@@ -8223,6 +8223,21 @@ function preencherInfoCelula(){
   if(fixosEl) fixosEl.value = fixos || '';
   const lt = (cel.membros||[]).find(m=>m.funcao==='lider_treinamento');
   if(lt){ const ltEl=document.getElementById('rel-lider-trein'); if(ltEl) ltEl.value=lt.nome; }
+
+  // Meta de multiplicação — vem salva na própria célula, não precisa reescolher toda semana
+  const metaMultEl = document.getElementById('rel-meta-mult');
+  if(metaMultEl) metaMultEl.value = cel.dataMetaMultiplicacao || '';
+}
+
+// Salva a meta de multiplicação direto na célula assim que o líder escolhe o mês/ano —
+// não depende de terminar o relatório, e fica valendo (repetindo) nos próximos relatórios
+// até o líder mudar.
+function salvarMetaMultiplicacaoCel(){
+  const celId = parseInt(document.getElementById('rel-cel').value);
+  const cel = DB.celulas.find(c=>c.id===celId);
+  if(!cel) return;
+  cel.dataMetaMultiplicacao = document.getElementById('rel-meta-mult').value || '';
+  sv();
 }
 
 function selReuniaoBloco(el, val){
@@ -11793,6 +11808,10 @@ function sspConfirm() {
         <div class="fg"><label class="fl">Data do Encontro *</label><input class="fi" id="rel-data" type="date"></div>
       </div>
       <div class="fg"><label class="fl">Célula *</label><select class="fs" id="rel-cel" onchange="preencherInfoCelula()"></select></div>
+      <div class="fg" style="margin-top:8px">
+        <label class="fl">🎯 Data para Multiplicação <span style="font-weight:400;color:var(--ink3)">(mês/ano · fica salva, não precisa preencher toda semana)</span></label>
+        <input class="fi" id="rel-meta-mult" type="month" onchange="salvarMetaMultiplicacaoCel()">
+      </div>
       <div class="fg" style="margin-top:16px">
         <label class="fl" style="font-size:13px;font-weight:700;margin-bottom:8px;display:block">Houve reunião de célula esta semana? *</label>
         <div style="display:flex;gap:10px">
