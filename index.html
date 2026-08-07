@@ -2868,6 +2868,8 @@ function desfazerMultiplicacaoSupervisao(novoSupId){
   }
 
   // 6) Exclui o cadastro de supervisora criado na multiplicação (some com nota, dataMultiplicacao, tudo junto)
+  if(!DB._exclusoesPessoas) DB._exclusoesPessoas = [];
+  DB._exclusoesPessoas.push({ id: novoSupId, quando: Date.now() });
   DB.pessoas = DB.pessoas.filter(p => p.id !== novoSupId);
 
   sv();
@@ -2908,11 +2910,15 @@ function desfazerMultiplicacaoCelula(newCelId){
     // Se o cadastro de líder foi criado só pra essa multiplicação (não lidera mais nenhuma outra célula), remove
     const outraCelula = (DB.celulas||[]).some(c => c.id!==newCel.id && c.liderId===liderNovaCelId);
     if(!outraCelula && /promovido/i.test(liderNova.obs||'')){
+      if(!DB._exclusoesPessoas) DB._exclusoesPessoas = [];
+      DB._exclusoesPessoas.push({ id: liderNovaCelId, quando: Date.now() });
       DB.pessoas = DB.pessoas.filter(p => p.id !== liderNovaCelId);
     }
   }
 
   // 5) Exclui a célula criada na multiplicação (some com nota, dataMultiplicacao, tudo junto)
+  if(!DB._exclusoesCelulas) DB._exclusoesCelulas = [];
+  DB._exclusoesCelulas.push({ id: newCelId, quando: Date.now() });
   DB.celulas = DB.celulas.filter(c => c.id !== newCelId);
 
   sv();
@@ -6329,6 +6335,8 @@ function supEditarMembro(celId, membroId){
 function supRemoverMembro(celId, membroId){
   if(!confirm('Remover este membro da célula?')) return;
   const cel = DB.celulas.find(c=>Number(c.id)===Number(celId)); if(!cel) return;
+  if(!DB._exclusoesMembrosCelula) DB._exclusoesMembrosCelula = [];
+  DB._exclusoesMembrosCelula.push({ id: membroId, quando: Date.now() });
   cel.membros = (cel.membros||[]).filter(m=>String(m.id)!==String(membroId));
   sv();
   supAbrirDetCel(cel.id);
@@ -8785,7 +8793,16 @@ function confirmarLimparTeste(){
   if(!confirm('⚠️ Última confirmação: Apagar dados de teste permanentemente?')) return;
 
   // Remove test records (id < 200 = test data seeded initially)
-  const testIds = DB.pessoas.filter(p => p.id < 200).map(p => p.id);
+  const pessoasTestIds = DB.pessoas.filter(p => p.id < 200).map(p => p.id);
+  const celulasTestIds = DB.celulas.filter(c => c.id < 200).map(c => c.id);
+  const membrosTestIds = (DB.membrosGlobal||[]).filter(m => m.id < 200).map(m => m.id);
+  if(!DB._exclusoesPessoas) DB._exclusoesPessoas = [];
+  if(!DB._exclusoesCelulas) DB._exclusoesCelulas = [];
+  if(!DB._exclusoesMembros) DB._exclusoesMembros = [];
+  const agora = Date.now();
+  pessoasTestIds.forEach(id=>DB._exclusoesPessoas.push({id, quando:agora}));
+  celulasTestIds.forEach(id=>DB._exclusoesCelulas.push({id, quando:agora}));
+  membrosTestIds.forEach(id=>DB._exclusoesMembros.push({id, quando:agora}));
   DB.pessoas = DB.pessoas.filter(p => p.id >= 200);
   DB.celulas = DB.celulas.filter(c => c.id >= 200);
   DB.membrosGlobal = (DB.membrosGlobal||[]).filter(m => m.id >= 200);
