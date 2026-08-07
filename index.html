@@ -1442,23 +1442,26 @@ function mergeDB(local, remote){
 function _aplicarExclusoesPendentes(db){
   const exclM = db._exclusoesMembros||[], exclP = db._exclusoesPessoas||[],
         exclC = db._exclusoesCelulas||[], exclMC = db._exclusoesMembrosCelula||[];
+  // Normaliza tudo pra string na comparação — os IDs às vezes chegam como número,
+  // às vezes como texto (dependendo de qual botão/tela disparou a exclusão), e
+  // "298" !== 298 em JavaScript faz a exclusão silenciosamente não colar.
   if(exclM.length){
-    const ids = new Set(exclM.map(e=>e.id));
-    db.membrosGlobal = (db.membrosGlobal||[]).filter(m=>!ids.has(m.id));
-    (db.celulas||[]).forEach(c=>{ if(c.membros) c.membros = c.membros.filter(m=>!(m.globalId!=null && ids.has(m.globalId))); });
+    const ids = new Set(exclM.map(e=>String(e.id)));
+    db.membrosGlobal = (db.membrosGlobal||[]).filter(m=>!ids.has(String(m.id)));
+    (db.celulas||[]).forEach(c=>{ if(c.membros) c.membros = c.membros.filter(m=>!(m.globalId!=null && ids.has(String(m.globalId)))); });
   }
   if(exclP.length){
-    const ids = new Set(exclP.map(e=>e.id));
-    db.pessoas = (db.pessoas||[]).filter(p=>!ids.has(p.id));
-    (db.pessoas||[]).forEach(p=>{ if(p.parentId!=null && ids.has(p.parentId)) p.parentId=null; });
+    const ids = new Set(exclP.map(e=>String(e.id)));
+    db.pessoas = (db.pessoas||[]).filter(p=>!ids.has(String(p.id)));
+    (db.pessoas||[]).forEach(p=>{ if(p.parentId!=null && ids.has(String(p.parentId))) p.parentId=null; });
   }
   if(exclC.length){
-    const ids = new Set(exclC.map(e=>e.id));
-    db.celulas = (db.celulas||[]).filter(c=>!ids.has(c.id));
+    const ids = new Set(exclC.map(e=>String(e.id)));
+    db.celulas = (db.celulas||[]).filter(c=>!ids.has(String(c.id)));
   }
   if(exclMC.length){
-    const ids = new Set(exclMC.map(e=>e.id));
-    (db.celulas||[]).forEach(c=>{ if(c.membros) c.membros = c.membros.filter(m=>!ids.has(m.id)); });
+    const ids = new Set(exclMC.map(e=>String(e.id)));
+    (db.celulas||[]).forEach(c=>{ if(c.membros) c.membros = c.membros.filter(m=>!ids.has(String(m.id))); });
   }
   return db;
 }
