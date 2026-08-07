@@ -4023,7 +4023,7 @@ function renderSupDash(){
         <div>
           <div style="font-size:14px;font-weight:700;color:var(--ink)">${cel.nome}</div>
           <div style="font-size:11px;color:var(--ink3)">${lider?lider.nome:'—'} · ${cel.dia||''} · ${cel.local||''}</div>
-          ${cel.dataMetaMultiplicacao?`<div style="margin-top:4px;font-size:10px;font-weight:700;color:#7A4A00;background:#FDF3DC;display:inline-block;padding:2px 8px;border-radius:20px">🎯 Meta: ${fmtMesAno(cel.dataMetaMultiplicacao)}</div>`:''}
+          ${cel.dataMetaMultiplicacao?`<div style="margin-top:4px;font-size:10px;font-weight:700;color:#7A4A00;background:#FDF3DC;display:inline-block;padding:2px 8px;border-radius:20px">🎯 META PARA MULTIPLICAÇÃO: ${fmtMesAno(cel.dataMetaMultiplicacao)}</div>`:''}
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           ${hasRec
@@ -5235,7 +5235,7 @@ function coordVerDetalhesCel(celId) {
               <div style="font-size:13px;font-weight:700;color:#E8C97A">${lider?lider.nome:'—'}</div>
               <div style="font-size:10px;color:rgba(255,255,255,.45)">${cel.dia||''} · ${cel.local||''} · ${cel.area||''}</div>
               ${sup?`<div style="font-size:10px;color:rgba(255,255,255,.35)">Supervisor: ${sup.nome}</div>`:''}
-              ${cel.dataMetaMultiplicacao?`<div style="margin-top:4px;font-size:10px;font-weight:700;color:#7A4A00;background:#FDF3DC;display:inline-block;padding:2px 8px;border-radius:20px">🎯 Meta: ${fmtMesAno(cel.dataMetaMultiplicacao)}</div>`:''}
+              ${cel.dataMetaMultiplicacao?`<div style="margin-top:4px;font-size:10px;font-weight:700;color:#7A4A00;background:#FDF3DC;display:inline-block;padding:2px 8px;border-radius:20px">🎯 META PARA MULTIPLICAÇÃO: ${fmtMesAno(cel.dataMetaMultiplicacao)}</div>`:''}
             </div>
             <div style="text-align:right">
               <div style="font-size:14px;font-weight:700;padding:5px 12px;border-radius:20px;background:${st.bg};color:${st.color}">IVE ${ive}%</div>
@@ -6679,6 +6679,7 @@ function exportarPDFSupervisor(){
           <div style="font-size:11px;color:#888;margin-top:2px">
             Líder: ${lider?lider.nome:'—'} · ${cel.dia||''} ${cel.local?'· '+cel.local:''}
           </div>
+          ${cel.dataMetaMultiplicacao?`<div style="margin-top:4px;font-size:10px;font-weight:700;color:#7A4A00;background:#FDF3DC;display:inline-block;padding:2px 8px;border-radius:10px">🎯 META PARA MULTIPLICAÇÃO: ${fmtMesAno(cel.dataMetaMultiplicacao)}</div>`:''}
         </div>
         <div style="text-align:right">
           ${hasRec
@@ -7892,7 +7893,7 @@ function renderLiderRelatorios(pg){
         <div>
           <div style="font-size:20px;font-weight:700;color:var(--ink);font-family:'Cormorant Garamond',serif">Meus <i>Relatórios</i></div>
           <div style="font-size:12px;color:var(--ink3)">${celula?celula.nome:'—'} · ${todos.length} relatório${todos.length!==1?'s':''}</div>
-          ${celula?.dataMetaMultiplicacao?`<div style="margin-top:4px;font-size:11px;font-weight:700;color:#7A4A00;background:#FDF3DC;display:inline-block;padding:2px 10px;border-radius:20px">🎯 Meta de multiplicação: ${fmtMesAno(celula.dataMetaMultiplicacao)}</div>`:''}
+          ${celula?.dataMetaMultiplicacao?`<div style="margin-top:4px;font-size:11px;font-weight:700;color:#7A4A00;background:#FDF3DC;display:inline-block;padding:2px 10px;border-radius:20px">🎯 META PARA MULTIPLICAÇÃO: ${fmtMesAno(celula.dataMetaMultiplicacao)}</div>`:''}
         </div>
         <button onclick="abrirNovoRelatorioLider()" style="margin-left:auto;background:var(--ink);color:#E8C97A;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif">📋 Novo Relatório</button>
       </div>
