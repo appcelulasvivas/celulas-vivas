@@ -1897,13 +1897,19 @@ function meTransferirCelula(){
   if(idx<0){ alert('Membro não encontrado.'); return; }
 
   const [membro] = celOrig.membros.splice(idx,1);
+  // Registra a remoção da célula de origem no log persistente — sem isso, a
+  // próxima sincronização trazia o membro de volta pra célula antiga (a nuvem
+  // ainda não sabia da transferência).
+  if(!DB._exclusoesMembrosCelula) DB._exclusoesMembrosCelula = [];
+  DB._exclusoesMembrosCelula.push({ id: membro.id, quando: Date.now() });
   // Limpar função de LT se estava nessa célula
   if(membro.funcao==='lider_treinamento' && celOrig.treinNome===membro.nome){
     celOrig.treinNome=''; celOrig.treinOk='nao';
   }
-  // Adicionar na célula de destino
+  // Adicionar na célula de destino com um ID novo — usar o mesmo ID da célula de
+  // origem colidiria com a exclusão registrada acima, apagando a cópia nova também.
   if(!celDest.membros) celDest.membros=[];
-  celDest.membros.push({...membro, funcao:''});
+  celDest.membros.push({...membro, id: uid(), funcao:''});
 
   sv();
   closeMo('mo-me');
@@ -10105,6 +10111,11 @@ function savMembroGlobal(forcarSalvar=false) {
     if(anterior && anterior.celulaId && anterior.celulaId !== mgCelId){
       const celAnt = DB.celulas.find(c=>c.id===anterior.celulaId);
       if(celAnt && celAnt.membros){
+        const removidos = celAnt.membros.filter(m => m.nome.toLowerCase().trim() === nm.toLowerCase().trim());
+        if(removidos.length){
+          if(!DB._exclusoesMembrosCelula) DB._exclusoesMembrosCelula = [];
+          removidos.forEach(m=>DB._exclusoesMembrosCelula.push({ id: m.id, quando: Date.now() }));
+        }
         celAnt.membros = celAnt.membros.filter(m => m.nome.toLowerCase().trim() !== nm.toLowerCase().trim());
       }
     }
