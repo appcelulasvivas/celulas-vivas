@@ -7872,7 +7872,7 @@ function renderLiderRelatorios(pg){
   if(celula){
     (celula.relatorios||[]).forEach(r=>todos.push({...r, celulaNome:celula.nome, celulaId:celula.id}));
   }
-  todos.sort((a,b)=>b._id-a._id);
+  todos.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
 
   const faseClr = {'Descoberta':'#1A3A7A','Comunhão':'#1E5C38','Conflitos':'#8B1A1A','Multiplicar':'#7A4A00'};
   const faseBg  = {'Descoberta':'#D0DCF5','Comunhão':'#D4EFDF','Conflitos':'#F5CECE','Multiplicar':'#FDF3DC'};
@@ -8513,7 +8513,7 @@ function renderRelatorios(){
   cels.forEach(c=>{
     (c.relatorios||[]).forEach(r=>todos.push({...r, celulaNome:c.nome, celulaId:c.id}));
   });
-  todos.sort((a,b)=>b._id-a._id);
+  todos.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
 
   const faseClr = {'Descoberta':'#1A3A7A','Comunhão':'#1E5C38','Conflitos':'#8B1A1A','Multiplicar':'#7A4A00'};
   const faseBg  = {'Descoberta':'#D0DCF5','Comunhão':'#D4EFDF','Conflitos':'#F5CECE','Multiplicar':'#FDF3DC'};
