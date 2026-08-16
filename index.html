@@ -5134,6 +5134,9 @@ function coordRenderCelulas(){
             </div>
             <span style="font-size:11px;padding:4px 12px;border-radius:20px;background:${supSt.bg};color:${supSt.color};font-weight:700">IVE ${supIve}% · ${supSt.label}</span>
           </div>
+          <div style="margin-bottom:14px">
+            <button onclick="event.stopPropagation();coordAbrirTransferirLiderados(${sup.id})" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:7px 14px;font-size:11px;font-weight:700;color:var(--ink2);cursor:pointer;font-family:'Outfit',sans-serif;display:inline-flex;align-items:center;gap:6px">🔄 Transferir Liderados</button>
+          </div>
           <!-- Estatísticas -->
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">
             <div style="background:var(--surface2);border-radius:8px;padding:8px;text-align:center"><div style="font-size:18px;font-weight:700;color:var(--ink)">${supTotalR}</div><div style="font-size:9px;color:var(--ink3);text-transform:uppercase">Reuniões</div></div>
@@ -5183,6 +5186,99 @@ function coordToggleAccordion(supId){
     const rect = list.getBoundingClientRect();
     window.scrollBy({top: rect.top - 80, behavior:'smooth'});
   }, 120);
+}
+
+// ── Transferir Liderados (líderes + células) de um supervisor pra outro ──
+// Útil quando um supervisor deixa a função: em vez de reatribuir líder por
+// líder e célula por célula manualmente, o coordenador escolhe o destino uma
+// vez e o app reatribui tudo de uma vez, deixando pronto pra excluir o
+// cadastro de supervisora com segurança em seguida.
+function coordAbrirTransferirLiderados(supId){
+  const sup = DB.pessoas.find(p=>p.id===supId);
+  if(!sup) return;
+  const meusLids = DB.pessoas.filter(p=>p.role==='lider'&&Number(p.parentId)===Number(supId));
+  const minhasCels = DB.celulas.filter(c=>Number(c.supId)===Number(supId));
+  const outrosSups = DB.pessoas.filter(p=>p.role==='supervisor'&&p.id!==supId)
+    .sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR',{sensitivity:'base'}));
+
+  let mo = document.getElementById('mo-coord-transferir');
+  if(!mo){
+    mo = document.createElement('div');
+    mo.id = 'mo-coord-transferir';
+    mo.className = 'ov';
+    mo.style.zIndex = '1100';
+    document.body.appendChild(mo);
+    mo.addEventListener('click', e=>{ if(e.target===mo) mo.classList.remove('on'); });
+  }
+
+  if(!meusLids.length && !minhasCels.length){
+    mo.innerHTML = `<div class="mo" style="max-width:400px">
+      <div class="mo-hd"><div class="mo-t">🔄 Transferir Liderados</div><div class="mo-x" onclick="document.getElementById('mo-coord-transferir').classList.remove('on')">✕</div></div>
+      <div class="mo-bd"><div class="emp"><div class="ei">🔄</div><div class="et">Nada para transferir</div><div class="es">${sup.nome} não tem líderes nem células vinculados no momento.</div></div></div>
+    </div>`;
+    mo.classList.add('on');
+    return;
+  }
+
+  mo.innerHTML = `
+    <div class="mo" style="max-width:440px">
+      <div class="mo-hd">
+        <div>
+          <div class="mo-t">🔄 Transferir Liderados</div>
+          <div style="font-size:12px;color:var(--ink3);margin-top:2px">De: <b>${sup.nome}</b></div>
+        </div>
+        <div class="mo-x" onclick="document.getElementById('mo-coord-transferir').classList.remove('on')">✕</div>
+      </div>
+      <div class="mo-bd">
+        <div style="background:var(--gold-bg);border:1px solid var(--gold-bd);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--ink2)">
+          Serão transferidos: <b>${meusLids.length} líder${meusLids.length!==1?'es':''}</b> e <b>${minhasCels.length} célula${minhasCels.length!==1?'s':''}</b>.
+        </div>
+        <div class="fg">
+          <label class="fl">Transferir para</label>
+          <select class="fs" id="coord-transf-destino">
+            <option value="">— Selecione o novo supervisor —</option>
+            ${outrosSups.map(s=>`<option value="${s.id}">${s.nome} · ${s.area}</option>`).join('')}
+          </select>
+        </div>
+        <div style="font-size:11px;color:var(--ink3);margin-top:10px">
+          ${meusLids.map(l=>'• '+l.nome).join('<br>')}
+        </div>
+      </div>
+      <div class="mo-ft">
+        <button class="btn bg" onclick="document.getElementById('mo-coord-transferir').classList.remove('on')">Cancelar</button>
+        <button class="btn bp" onclick="coordConfirmarTransferirLiderados(${supId})">🔄 Transferir</button>
+      </div>
+    </div>`;
+  mo.classList.add('on');
+}
+
+function coordConfirmarTransferirLiderados(origId){
+  const destId = parseInt(document.getElementById('coord-transf-destino')?.value);
+  if(!destId){ alert('⚠️ Selecione o novo supervisor.'); return; }
+  const origem = DB.pessoas.find(p=>p.id===origId);
+  const destino = DB.pessoas.find(p=>p.id===destId);
+  if(!origem||!destino) return;
+
+  const meusLids = DB.pessoas.filter(p=>p.role==='lider'&&Number(p.parentId)===Number(origId));
+  const minhasCels = DB.celulas.filter(c=>Number(c.supId)===Number(origId));
+
+  meusLids.forEach(l=>{ l.parentId = destId; });
+  minhasCels.forEach(c=>{ c.supId = destId; });
+
+  sv();
+  updateCounts();
+  document.getElementById('mo-coord-transferir').classList.remove('on');
+  _coordSupAberto = null;
+  coordRenderCelulas();
+
+  alert(`✅ Transferido com sucesso!\n\n${meusLids.length} líder(es) e ${minhasCels.length} célula(s) agora estão sob "${destino.nome}".`);
+
+  // Pergunta se quer excluir o cadastro de supervisora agora, já que não tem mais liderados
+  setTimeout(()=>{
+    if(confirm(`Deseja excluir o cadastro de "${origem.nome}" como supervisora agora?\n\nOs outros papéis dela (se houver, como líder ou coordenadora) não serão afetados — são cadastros separados.`)){
+      delP(origId);
+    }
+  }, 300);
 }
 
 // ── Modal Membros da Célula (coordenador) ─────────────────────
