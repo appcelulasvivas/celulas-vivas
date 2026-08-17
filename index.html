@@ -2897,6 +2897,13 @@ function desfazerMultiplicacaoCelula(newCelId){
   const liderNova = liderNovaCelId ? DB.pessoas.find(p => p.id === liderNovaCelId) : null;
 
   // 1) Devolve os membros pra célula original
+  // Se esses IDs já tiverem sido excluídos antes (ex: alguém apagou a cópia
+  // duplicada manualmente), remove esse bloqueio — senão a próxima sincronização
+  // tira esses membros de novo, achando que é uma exclusão pendente ainda válida.
+  const idsRestaurando = new Set((newCel.membros||[]).map(m=>String(m.id)));
+  if(DB._exclusoesMembrosCelula && idsRestaurando.size){
+    DB._exclusoesMembrosCelula = DB._exclusoesMembrosCelula.filter(e=>!idsRestaurando.has(String(e.id)));
+  }
   cel0.membros = [...(cel0.membros||[]), ...(newCel.membros||[])];
 
   // 2) Restaura o "Líder em Treinamento" na célula original
