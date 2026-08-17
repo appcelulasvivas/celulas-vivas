@@ -1115,6 +1115,7 @@ body.modo-pastor .pastor-ro-notice{display:block !important}
   <div class="ni" id="nv-duplicatas" onclick="abrirFerramentaDuplicatas()"><div class="ni-ico" style="background:#FFF8E1">🔍</div><span class="ni-lbl">🔍 Detectar Duplicatas</span></div>
   <div class="ni" id="nv-ids-dup" onclick="repararIdsDuplicados()"><div class="ni-ico" style="background:#FDEEDC">🆔</div><span class="ni-lbl">🆔 Corrigir IDs Duplicados</span></div>
   <div class="ni" id="nv-limpar" onclick="confirmarLimparTeste()"><div class="ni-ico" style="background:#FDEAEA">🗑️</div><span class="ni-lbl">🗑️ Apagar Dados de Teste</span></div>
+  <div class="ni" id="nv-limpar-dados" onclick="abrirFerramentaLimpezaDados()"><div class="ni-ico" style="background:#FDEAEA">🧨</div><span class="ni-lbl">🧨 Limpar Dados</span></div>
   </div>
   <div class="ni" onclick="fazerLogout()" style="margin-top:8px;border-top:1px solid var(--border2);padding-top:12px"><div class="ni-ico" style="background:#F3F4F6">↩</div><span class="ni-lbl" style="color:var(--ink2)">Sair / Trocar usuário</span></div>
   <div style="padding:12px 16px;margin:8px 10px;background:var(--gold-bg);border:1px solid var(--gold-bd);border-radius:10px">
@@ -8945,6 +8946,148 @@ function confirmarLimparTeste(){
   updateCounts();
   renderDash();
   alert('✅ Dados de teste removidos com sucesso! O app agora contém apenas os dados reais importados da planilha.');
+}
+
+// ══════════════════════════════════════════════════
+//  LIMPAR DADOS — ferramenta com 4 opções de limpeza
+// ══════════════════════════════════════════════════
+function abrirFerramentaLimpezaDados(){
+  const testPessoas = DB.pessoas.filter(p => p.id < 200).length;
+  const testCels     = DB.celulas.filter(c => c.id < 200).length;
+  const relImportados = DB.celulas.reduce((n,c)=>n+(c.relatorios||[]).filter(r=>r.importado===true).length, 0);
+  const totalPessoas = DB.pessoas.length;
+  const totalCels    = DB.celulas.length;
+  const totalMg       = (DB.membrosGlobal||[]).length;
+  const totalRels     = DB.celulas.reduce((n,c)=>n+(c.relatorios||[]).length, 0);
+
+  let mo = document.getElementById('mo-limpar-dados');
+  if(!mo){
+    mo = document.createElement('div');
+    mo.id = 'mo-limpar-dados';
+    mo.className = 'ov';
+    mo.style.zIndex = '900';
+    document.body.appendChild(mo);
+    mo.addEventListener('click', e=>{ if(e.target===mo) mo.classList.remove('on'); });
+  }
+
+  mo.innerHTML = `
+    <div class="mo" style="max-width:520px">
+      <div class="mo-hd"><div class="mo-t">🧨 Limpar Dados</div><div class="mo-x" onclick="document.getElementById('mo-limpar-dados').classList.remove('on')">✕</div></div>
+      <div class="mo-bd">
+        <div style="background:var(--gold-bg);border:1px solid var(--gold-bd);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--ink2)">
+          Escolha o que apagar. As opções 3 e 4 são <b>permanentes e afetam todas as áreas</b> — vão pedir uma confirmação extra por escrito.
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label class="rel-radio-opt" style="align-items:flex-start"><input type="radio" name="ld-opt" value="teste" style="margin-top:2px;margin-right:8px" checked>
+            <div><b>1. Dados de Teste</b><div style="font-size:11px;color:var(--ink3);margin-top:2px">${testPessoas} pessoa(s) e ${testCels} célula(s) de exemplo (id&lt;200). Dados reais ficam intactos.</div></div>
+          </label>
+          <label class="rel-radio-opt" style="align-items:flex-start"><input type="radio" name="ld-opt" value="rels-importados" style="margin-top:2px;margin-right:8px">
+            <div><b>2. Relatórios importados recentemente</b><div style="font-size:11px;color:var(--ink3);margin-top:2px">${relImportados} relatório(s) trazidos pela ferramenta "Importar Rels. de Células". Não inclui o histórico antigo já embutido no app — esse não tem como distinguir de relatório digitado manualmente.</div></div>
+          </label>
+          <label class="rel-radio-opt" style="align-items:flex-start;border-color:var(--red-bd)"><input type="radio" name="ld-opt" value="tudo-menos-cadastro" style="margin-top:2px;margin-right:8px">
+            <div><b>3. Apagar tudo, menos o Cadastro Global</b><div style="font-size:11px;color:var(--ink3);margin-top:2px">Remove ${totalPessoas} pessoa(s), ${totalCels} célula(s) e ${totalRels} relatório(s). Mantém os ${totalMg} membros do Cadastro Global intactos.</div></div>
+          </label>
+          <label class="rel-radio-opt" style="align-items:flex-start;border-color:var(--red-bd)"><input type="radio" name="ld-opt" value="tudo" style="margin-top:2px;margin-right:8px">
+            <div><b>4. Apagar TUDO</b><div style="font-size:11px;color:var(--ink3);margin-top:2px">Remove ${totalPessoas} pessoa(s), ${totalCels} célula(s), ${totalMg} do Cadastro Global e ${totalRels} relatório(s). Zera o app por completo.</div></div>
+          </label>
+        </div>
+        <div id="ld-aviso-backup" style="display:none;margin-top:16px;background:#FDF3DC;border:1px solid #E8C97A;border-radius:10px;padding:12px 14px">
+          <div style="font-size:12px;font-weight:700;color:#7A4A00;margin-bottom:6px">📥 Faça um backup antes de continuar</div>
+          <div style="font-size:11px;color:var(--ink2);margin-bottom:10px">Essa ação é permanente. Exporte um backup agora, pra ter uma cópia de segurança caso precise recuperar algo depois.</div>
+          <button class="btn bg" style="font-size:11px;padding:6px 12px" onclick="exportarDados()">📥 Exportar Backup agora</button>
+        </div>
+        <div id="ld-confirmacao-texto" style="display:none;margin-top:12px;background:var(--red-bg);border:1px solid #F5ADAD;border-radius:10px;padding:12px 14px">
+          <div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:8px">Pra confirmar, digite <b>APAGAR TUDO</b> abaixo:</div>
+          <input class="fi" id="ld-confirmacao-input" placeholder="Digite aqui" style="text-transform:uppercase">
+        </div>
+      </div>
+      <div class="mo-ft">
+        <button class="btn bg" onclick="document.getElementById('mo-limpar-dados').classList.remove('on')">Cancelar</button>
+        <button class="btn bd" onclick="confirmarLimpezaDados()">🧨 Executar</button>
+      </div>
+    </div>`;
+  mo.classList.add('on');
+
+  // Mostra/esconde o aviso de backup e a caixa de confirmação por escrito conforme a opção escolhida
+  mo.querySelectorAll('input[name="ld-opt"]').forEach(r=>{
+    r.addEventListener('change', ()=>{
+      const val = mo.querySelector('input[name="ld-opt"]:checked')?.value;
+      const destrutiva = (val==='tudo'||val==='tudo-menos-cadastro');
+      document.getElementById('ld-aviso-backup').style.display = destrutiva ? 'block' : 'none';
+      document.getElementById('ld-confirmacao-texto').style.display = destrutiva ? 'block' : 'none';
+    });
+  });
+}
+
+function confirmarLimpezaDados(){
+  const opt = document.querySelector('input[name="ld-opt"]:checked')?.value;
+  if(!opt) return;
+
+  if(opt==='teste'){
+    document.getElementById('mo-limpar-dados').classList.remove('on');
+    confirmarLimparTeste();
+    return;
+  }
+
+  if(opt==='rels-importados'){
+    let removidos = 0;
+    if(!DB._exclusoesRelatorios) DB._exclusoesRelatorios = [];
+    const agora = Date.now();
+    (DB.celulas||[]).forEach(c=>{
+      const antes = (c.relatorios||[]).length;
+      const excluidos = (c.relatorios||[]).filter(r=>r.importado===true);
+      excluidos.forEach(r=>DB._exclusoesRelatorios.push({ id: r._id!=null?r._id:r.id, quando: agora }));
+      c.relatorios = (c.relatorios||[]).filter(r=>r.importado!==true);
+      removidos += antes - c.relatorios.length;
+    });
+    if(!removidos){
+      alert('✅ Não há relatórios importados (marcados) pra remover.');
+      return;
+    }
+    if(!confirm(`Remover ${removidos} relatório(s) importado(s)?`)) return;
+    sv(); updateCounts(); renderDash();
+    document.getElementById('mo-limpar-dados').classList.remove('on');
+    alert(`✅ ${removidos} relatório(s) importado(s) removido(s).`);
+    return;
+  }
+
+  // Opções destrutivas: exige o texto de confirmação
+  const texto = (document.getElementById('ld-confirmacao-input')?.value||'').trim().toUpperCase();
+  if(texto !== 'APAGAR TUDO'){
+    alert('⚠️ Digite exatamente "APAGAR TUDO" na caixa pra confirmar.');
+    return;
+  }
+
+  const mantemCadastro = opt==='tudo-menos-cadastro';
+  const rotulo = mantemCadastro ? 'tudo, menos o Cadastro Global' : 'TUDO (incluindo o Cadastro Global)';
+  if(!confirm(`⚠️ ÚLTIMA CONFIRMAÇÃO\n\nIsso vai apagar ${rotulo}, de forma permanente, em todas as áreas.\n\nContinuar?`)) return;
+
+  const agora = Date.now();
+  if(!DB._exclusoesPessoas) DB._exclusoesPessoas = [];
+  if(!DB._exclusoesCelulas) DB._exclusoesCelulas = [];
+  if(!DB._exclusoesMembros) DB._exclusoesMembros = [];
+  if(!DB._exclusoesRelatorios) DB._exclusoesRelatorios = [];
+
+  DB.pessoas.forEach(p=>DB._exclusoesPessoas.push({id:p.id, quando:agora}));
+  DB.celulas.forEach(c=>{
+    DB._exclusoesCelulas.push({id:c.id, quando:agora});
+    (c.relatorios||[]).forEach(r=>DB._exclusoesRelatorios.push({id:r._id!=null?r._id:r.id, quando:agora}));
+  });
+  if(!mantemCadastro){
+    (DB.membrosGlobal||[]).forEach(m=>DB._exclusoesMembros.push({id:m.id, quando:agora}));
+  }
+
+  DB.pessoas = [];
+  DB.celulas = [];
+  if(!mantemCadastro) DB.membrosGlobal = [];
+
+  sv();
+  updateCounts();
+  renderDash();
+  document.getElementById('mo-limpar-dados').classList.remove('on');
+  alert(mantemCadastro
+    ? '✅ Tudo apagado, com exceção do Cadastro Global de Membros, que foi mantido intacto.'
+    : '✅ Todos os dados foram apagados. O app está zerado.');
 }
 
 // ══════════════════════════════════════════════════
