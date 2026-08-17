@@ -1427,6 +1427,7 @@ function mergeDB(local, remote){
     _exclusoesPessoas:      _mesclarArraysPorId(local._exclusoesPessoas, remote._exclusoesPessoas, maisNovo),
     _exclusoesCelulas:      _mesclarArraysPorId(local._exclusoesCelulas, remote._exclusoesCelulas, maisNovo),
     _exclusoesMembrosCelula:_mesclarArraysPorId(local._exclusoesMembrosCelula, remote._exclusoesMembrosCelula, maisNovo),
+    _exclusoesRelatorios:   _mesclarArraysPorId(local._exclusoesRelatorios, remote._exclusoesRelatorios, maisNovo),
     _id: Math.max(local._id||1, remote._id||1), // sempre o maior — nunca gera ID colidindo
   };
   return _aplicarExclusoesPendentes(unido);
@@ -1441,7 +1442,8 @@ function mergeDB(local, remote){
 // antiga por um tempo.
 function _aplicarExclusoesPendentes(db){
   const exclM = db._exclusoesMembros||[], exclP = db._exclusoesPessoas||[],
-        exclC = db._exclusoesCelulas||[], exclMC = db._exclusoesMembrosCelula||[];
+        exclC = db._exclusoesCelulas||[], exclMC = db._exclusoesMembrosCelula||[],
+        exclR = db._exclusoesRelatorios||[];
   // Normaliza tudo pra string na comparação — os IDs às vezes chegam como número,
   // às vezes como texto (dependendo de qual botão/tela disparou a exclusão), e
   // "298" !== 298 em JavaScript faz a exclusão silenciosamente não colar.
@@ -1462,6 +1464,10 @@ function _aplicarExclusoesPendentes(db){
   if(exclMC.length){
     const ids = new Set(exclMC.map(e=>String(e.id)));
     (db.celulas||[]).forEach(c=>{ if(c.membros) c.membros = c.membros.filter(m=>!ids.has(String(m.id))); });
+  }
+  if(exclR.length){
+    const ids = new Set(exclR.map(e=>String(e.id)));
+    (db.celulas||[]).forEach(c=>{ if(c.relatorios) c.relatorios = c.relatorios.filter(r=>{ const k=_chaveReg(r); return k==null || !ids.has(String(k)); }); });
   }
   return db;
 }
@@ -2679,9 +2685,14 @@ function executarCorrecaoVinculos(){
       }
 
       // 6. Verificar se líder existe no cadastro global (DB.membrosGlobal)
+      // Checa por nome OU telefone — evita criar um segundo cadastro pra
+      // alguém que já está lá com o nome digitado um pouco diferente.
       if(!DB) return;
+      var liderTelLimpo = (lider.tel||'').replace(/\D/g,'');
       var globalExiste = (DB.membrosGlobal||[]).find(function(g){
-        return g.nome.toLowerCase().trim() === lider.nome.toLowerCase().trim();
+        var mesmoNome = g.nome.toLowerCase().trim() === lider.nome.toLowerCase().trim();
+        var mesmoTel = liderTelLimpo && (g.tel||'').replace(/\D/g,'') === liderTelLimpo;
+        return mesmoNome || mesmoTel;
       });
       if(!globalExiste){
         var liderRef2 = lider;
@@ -3292,6 +3303,11 @@ function dupManter(di, ri){
   var manter = d.rels[ri];
   var cel = DB.celulas.find(function(c){return c.id===d.cel.id;});
   if(!cel) return;
+  var removidos = (cel.relatorios||[]).filter(function(r){return r.data===d.data && r._id!==manter._id;});
+  if(removidos.length){
+    if(!DB._exclusoesRelatorios) DB._exclusoesRelatorios = [];
+    removidos.forEach(function(r){ DB._exclusoesRelatorios.push({ id: r._id!=null?r._id:r.id, quando: Date.now() }); });
+  }
   cel.relatorios = (cel.relatorios||[]).filter(function(r){return r.data!==d.data || r._id===manter._id;});
   sv();
   alert('Duplicatas removidas!');
@@ -3304,6 +3320,8 @@ function dupExcluir(di, ri){
   var excluir = d.rels[ri];
   var cel = DB.celulas.find(function(c){return c.id===d.cel.id;});
   if(!cel) return;
+  if(!DB._exclusoesRelatorios) DB._exclusoesRelatorios = [];
+  DB._exclusoesRelatorios.push({ id: excluir._id!=null?excluir._id:excluir.id, quando: Date.now() });
   cel.relatorios = (cel.relatorios||[]).filter(function(r){return r._id!==excluir._id;});
   sv();
   alert('Relatorio excluido!');
@@ -10146,8 +10164,9 @@ function savMembroGlobal(forcarSalvar=false) {
       const mTel = (m.tel||'').replace(/\D/g,'');
       const mesmNome = m.nome.trim().toLowerCase() === nm.toLowerCase();
       const mesmNasc = m.nasc && nasc && m.nasc === nasc;
-      // Duplicata: mesmo telefone OU (mesmo nome + mesma data de nascimento)
-      return (telLimpo && mTel && mTel === telLimpo) || (mesmNome && mesmNasc);
+      const mesmSexo = m.sexo && sexo && m.sexo === sexo;
+      // Duplicata: mesmo telefone OU (mesmo nome + mesma data de nascimento + mesmo sexo)
+      return (telLimpo && mTel && mTel === telLimpo) || (mesmNome && mesmNasc && mesmSexo);
     });
 
     if(duplicata){
@@ -10158,11 +10177,11 @@ function savMembroGlobal(forcarSalvar=false) {
         : '?';
       const motivo = (duplicata.tel||'').replace(/\D/g,'') === telLimpo
         ? `mesmo telefone (${tel})`
-        : `mesmo nome e data de nascimento`;
+        : `mesmo nome, data de nascimento e sexo`;
 
       const confirmar = confirm(
         `⚠️ Possível duplicata encontrada!\n\n` +
-        `"${duplicata.nome}" · ${duplicata.tel||'sem tel'} · ${idade} anos\n` +
+        `"${duplicata.nome}" · ${duplicata.sexo==='M'?'Masculino':duplicata.sexo==='F'?'Feminino':'—'} · ${duplicata.tel||'sem tel'} · ${idade} anos\n` +
         `${celNome}\n\n` +
         `Motivo: ${motivo}\n\n` +
         `Deseja salvar mesmo assim?`
