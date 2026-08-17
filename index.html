@@ -9569,6 +9569,10 @@ function spConfirm() {
   }
 
   // Create new cell
+  // Os membros que vão para a nova célula precisam de IDs novos — usar o mesmo
+  // ID que tinham na célula original colidiria com a exclusão registrada abaixo,
+  // apagando a cópia nova também.
+  const membrosNovaCelula = splitData.b.map(m => ({...m, id: uid()}));
   const newCel = {
     id:        uid(),
     nome:      nameB,
@@ -9579,13 +9583,18 @@ function spConfirm() {
     area:      cel.area,
     treinNome: '',
     treinOk:   'nao',
-    membros:   splitData.b,
+    membros:   membrosNovaCelula,
     maeId:     cel.id,
     maeNome:   nameA,
     dataMultiplicacao: new Date().toLocaleDateString('pt-BR'),
     nota:      `Célula nascida da multiplicação de "${nameA}" em ${new Date().toLocaleDateString('pt-BR')} · Aprovado por ${sup}`,
   };
   DB.celulas.push(newCel);
+  // Registra a remoção desses membros da célula original no log persistente —
+  // sem isso, a próxima sincronização trazia todo mundo de volta (a nuvem ainda
+  // não sabia da multiplicação).
+  if(!DB._exclusoesMembrosCelula) DB._exclusoesMembrosCelula = [];
+  splitData.b.forEach(m => DB._exclusoesMembrosCelula.push({ id: m.id, quando: Date.now() }));
 
   // ── Atualizar cadastro global do membro promovido: trein_treinamento → lider_celula ──
   if (traineeNome) {
