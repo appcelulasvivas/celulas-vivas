@@ -1365,7 +1365,13 @@ function _mesclarArraysPorId(localArr, remoteArr, maisNovo){
     if(!mapa.has(k)){ mapa.set(k, l); return; }
     const r = mapa.get(k);
     if(JSON.stringify(r) !== JSON.stringify(l)){
-      mapa.set(k, maisNovo==='local' ? l : r);
+      // Prefere o carimbo por registro (_updatedAt) de cada lado, quando pelo
+      // menos um dos dois tiver — só cai pro relógio geral do banco (maisNovo)
+      // se nenhum dos dois lados tiver esse carimbo ainda (dado antigo, de
+      // antes dessa proteção existir).
+      const lt = l._updatedAt||0, rt = r._updatedAt||0;
+      const vencedor = (lt>0||rt>0) ? (lt>=rt ? l : r) : (maisNovo==='local' ? l : r);
+      mapa.set(k, vencedor);
     }
   });
   return Array.from(mapa.values());
@@ -1380,11 +1386,17 @@ function _mesclarCelulas(localCels, remoteCels, maisNovo){
     if(!lc || lc.id==null) return;
     if(!mapa.has(lc.id)){ mapa.set(lc.id, lc); return; }
     const rc = mapa.get(lc.id);
-    const base = maisNovo==='local' ? lc : rc;
+    // Mesma lógica do array acima, mas por célula: usa o carimbo da PRÓPRIA
+    // célula pra decidir quem "ganha" os campos dela (nome, treinNome,
+    // treinOk, liderId etc.) — não depende mais de qual aparelho salvou
+    // qualquer outra coisa por último no banco inteiro.
+    const lt = lc._updatedAt||0, rt = rc._updatedAt||0;
+    const maisNovoCel = (lt>0||rt>0) ? (lt>=rt ? 'local' : 'remote') : maisNovo;
+    const base = maisNovoCel==='local' ? lc : rc;
     mapa.set(lc.id, {
       ...base,
-      membros: _mesclarArraysPorId(lc.membros, rc.membros, maisNovo),
-      relatorios: _mesclarArraysPorId(lc.relatorios, rc.relatorios, maisNovo),
+      membros: _mesclarArraysPorId(lc.membros, rc.membros, maisNovoCel),
+      relatorios: _mesclarArraysPorId(lc.relatorios, rc.relatorios, maisNovoCel),
     });
   });
   return Array.from(mapa.values());
@@ -1482,8 +1494,42 @@ function _aplicarExclusoesPendentes(db){
 // Em vez disso, só marca que precisa rodar de novo assim que a atual terminar.
 let _svPendente = false;
 
+// ── Carimbo por registro (evita que mudanças em UM registro sejam perdidas
+// quando OUTRO aparelho salva algo não relacionado) ────────────────────────
+// Antes, a mesclagem decidia "qual lado é mais novo" olhando só um relógio
+// único pra todo o banco — então qualquer salvamento em qualquer aparelho
+// podia sobrescrever mudanças recentes em pessoas/células que ele nem tocou.
+// Agora, cada pessoa e cada célula ganha seu próprio "_updatedAt", carimbado
+// aqui sempre que o registro realmente mudar desde o último save — e a
+// mesclagem passa a decidir o vencedor registro por registro.
+let _ultimoSnapshotDB = null;
+
+function _carimbarRegistrosAlterados(){
+  if(!_ultimoSnapshotDB){
+    // Primeira vez nessa aba/sessão — nada para comparar ainda, só guarda o snapshot.
+    _ultimoSnapshotDB = { pessoas:{}, celulas:{} };
+    (DB.pessoas||[]).forEach(p=>{ _ultimoSnapshotDB.pessoas[p.id] = JSON.stringify(p); });
+    (DB.celulas||[]).forEach(c=>{ _ultimoSnapshotDB.celulas[c.id] = JSON.stringify(c); });
+    return;
+  }
+  const agora = Date.now();
+  (DB.pessoas||[]).forEach(p=>{
+    const antes = _ultimoSnapshotDB.pessoas[p.id];
+    const atual = JSON.stringify(p);
+    if(antes !== atual){ p._updatedAt = agora; }
+    _ultimoSnapshotDB.pessoas[p.id] = JSON.stringify(p); // já com o novo carimbo
+  });
+  (DB.celulas||[]).forEach(c=>{
+    const antes = _ultimoSnapshotDB.celulas[c.id];
+    const atual = JSON.stringify(c);
+    if(antes !== atual){ c._updatedAt = agora; }
+    _ultimoSnapshotDB.celulas[c.id] = JSON.stringify(c);
+  });
+}
+
 const sv = ()=>{
-  DB._updatedAt = Date.now(); // timestamp real para resolver conflitos de sync
+  _carimbarRegistrosAlterados();
+  DB._updatedAt = Date.now(); // timestamp geral — ainda usado como reserva quando nenhum dos dois lados tem carimbo por registro
   localStorage.setItem('CVdb', JSON.stringify(DB));
   localStorage.setItem('CVarea', curArea);
   // Proteção: nunca envia à nuvem um banco suspeitosamente pequeno (< 15 pessoas)
@@ -1510,6 +1556,7 @@ function _executarSyncNuvem(){
       let remote = null;
       if(doc && doc.data){ try { remote = JSON.parse(doc.data); } catch(e){ remote = null; } }
       DB = mergeDB(DB, remote);
+      _ultimoSnapshotDB = null; // reinicia a comparação — evita carimbos falsos logo após mesclar
       DB._updatedAt = Date.now();
       localStorage.setItem('CVdb', JSON.stringify(DB));
       await FirebaseREST.set('celulas_vivas','db',{
@@ -3453,6 +3500,7 @@ async function autoConnectFirebase(){
       if(remote){
         const dbAntesDeMesclar = localSuspeito ? {...DB, _updatedAt: 0} : DB; // se local suspeito, força a nuvem "ganhar" empates
         DB = mergeDB(dbAntesDeMesclar, remote);
+        _ultimoSnapshotDB = null; // reinicia a comparação — evita carimbos falsos logo após mesclar
         if(!DB.mensagens) DB.mensagens = [];
         if(!DB.membrosGlobal) DB.membrosGlobal = [];
         localStorage.setItem('CVdb', JSON.stringify(DB));
@@ -3576,6 +3624,7 @@ function iniciarListener(){
       const remotoSuspeito = (DB.pessoas||[]).length > 15 && (remote.pessoas||[]).length < (DB.pessoas||[]).length / 2;
       if(!remotoSuspeito){
         DB = mergeDB(DB, remote);
+        _ultimoSnapshotDB = null; // reinicia a comparação — evita carimbos falsos logo após mesclar
         if(!DB.mensagens) DB.mensagens = [];
         if(!DB.membrosGlobal) DB.membrosGlobal = [];
         localStorage.setItem('CVdb', JSON.stringify(DB));
